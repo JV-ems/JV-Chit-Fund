@@ -365,11 +365,22 @@ async function handleRequest(req, res) {
     }
   }
 
-  // Static File Serving (fallback for local development)
-  let safePath = pathname;
-  if (safePath === '/') safePath = '/index.html';
+  // Static File Serving (fallback for Vercel / local development)
+  let safePath = pathname || '/';
+  if (safePath === '/' || safePath === '') safePath = '/index.html';
 
-  const filePath = path.join(__dirname, decodeURIComponent(safePath));
+  if (safePath.startsWith('/assets/')) {
+    safePath = safePath.replace('/assets/', '/assests/');
+  }
+
+  let decodedPath = safePath;
+  try {
+    decodedPath = decodeURIComponent(safePath);
+  } catch (e) {
+    decodedPath = safePath;
+  }
+
+  const filePath = path.join(__dirname, decodedPath);
 
   fs.readFile(filePath, (err, content) => {
     if (err) {
