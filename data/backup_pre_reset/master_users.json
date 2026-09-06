@@ -1,0 +1,194 @@
+[
+  {
+    "id": "adm_1",
+    "username": "PLSSV",
+    "name": "PLSSV (Admin)",
+    "role": "admin",
+    "referral": "PLSSV",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "adm_2",
+    "username": "Arun",
+    "name": "Arun (Admin)",
+    "role": "admin",
+    "referral": "Arun",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "adm_3",
+    "username": "Varatha",
+    "name": "Varatha (Admin)",
+    "role": "admin",
+    "referral": "Varatha",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "adm_4",
+    "username": "Ramana",
+    "name": "Ramana (Admin)",
+    "role": "admin",
+    "referral": "Ramana",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "adm_5",
+    "username": "Vicky",
+    "name": "Vicky (Admin)",
+    "role": "admin",
+    "referral": "Vicky",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "adm_6",
+    "username": "admin",
+    "name": "Master Admin",
+    "role": "admin",
+    "referral": "All",
+    "passwordHash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
+  },
+  {
+    "id": "user_CUST_JV_1_0_1788623872428",
+    "username": "987",
+    "mobile": "987",
+    "name": "sri",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "1250",
+    "customerId": "CUST_JV_1_0_1788623872428",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_1_0_1788623883156",
+    "username": "789",
+    "mobile": "789",
+    "name": "sabari",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "1250",
+    "customerId": "CUST_JV_1_0_1788623883156",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_3_0_1788623900164",
+    "username": "987",
+    "mobile": "987",
+    "name": "sri 2",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_3.0",
+    "schemeType": "1000",
+    "customerId": "CUST_JV_3_0_1788623900164",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_3_0_1788623910777",
+    "username": "789",
+    "mobile": "789",
+    "name": "sabari 2",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_3.0",
+    "schemeType": "1000",
+    "customerId": "CUST_JV_3_0_1788623910777",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_2_0_1788623941251",
+    "username": "987",
+    "mobile": "987",
+    "name": "sabari 3",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_2.0",
+    "schemeType": "1250",
+    "customerId": "CUST_JV_2_0_1788623941251",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_2_0_1788623950092",
+    "username": "582",
+    "mobile": "582",
+    "name": "vasan 3",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_2.0",
+    "schemeType": "1250",
+    "customerId": "CUST_JV_2_0_1788623950092",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_3_0_1788623992968",
+    "username": "778",
+    "mobile": "778",
+    "name": "PL",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_3.0",
+    "schemeType": "2500",
+    "customerId": "CUST_JV_3_0_1788623992968",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_3_0_1788624004446",
+    "username": "5545",
+    "mobile": "5545",
+    "name": "SSV",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_3.0",
+    "schemeType": "5000",
+    "customerId": "CUST_JV_3_0_1788624004446",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_1_0_1788624031727",
+    "username": "546564",
+    "mobile": "546564",
+    "name": "PL 1",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "2500",
+    "customerId": "CUST_JV_1_0_1788624031727",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_1_0_1788624055945",
+    "username": "6546",
+    "mobile": "6546",
+    "name": "PL 2.0",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "2500",
+    "customerId": "CUST_JV_1_0_1788624055945",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_1_0_1788624066785",
+    "username": "6545",
+    "mobile": "6545",
+    "name": "SSV 2.0",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "5000",
+    "customerId": "CUST_JV_1_0_1788624066785",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  },
+  {
+    "id": "user_CUST_JV_3_0_1788624128590",
+    "username": "65465",
+    "mobile": "65465",
+    "name": "PL 3.0",
+    "role": "customer",
+    "referral": "PLSSV",
+    "version": "JV_3.0",
+    "schemeType": "5000",
+    "customerId": "CUST_JV_3_0_1788624128590",
+    "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"
+  }
+]

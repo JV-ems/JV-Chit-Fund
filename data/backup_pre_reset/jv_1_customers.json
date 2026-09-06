@@ -1,0 +1,442 @@
+[
+  {
+    "id": "CUST_JV_1_0_1788623872428",
+    "sno": 1,
+    "name": "sri",
+    "mobile": "987",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "1250",
+    "payments": [
+      {
+        "monthIndex": 0,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 1,
+        "isPaid": true,
+        "paidDate": "2026-11-05"
+      },
+      {
+        "monthIndex": 2,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 3,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 4,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 5,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 6,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 7,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 8,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 9,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 10,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 11,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      }
+    ],
+    "withdrawal": {
+      "isWithdrawn": true,
+      "withdrawDate": "2026-10-05",
+      "disbursedBy": "PLSSV",
+      "amount": 12250
+    },
+    "createdAt": "2026-09-05T15:57:52.433Z"
+  },
+  {
+    "id": "CUST_JV_1_0_1788623883156",
+    "sno": 2,
+    "name": "sabari",
+    "mobile": "789",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "1250",
+    "payments": [
+      {
+        "monthIndex": 0,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 1,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 2,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 3,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 4,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 5,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 6,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 7,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 8,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 9,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 10,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 11,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      }
+    ],
+    "withdrawal": {
+      "isWithdrawn": true,
+      "withdrawDate": "2026-11-05",
+      "disbursedBy": "PLSSV",
+      "amount": 12250
+    },
+    "createdAt": "2026-09-05T15:58:03.156Z"
+  },
+  {
+    "id": "CUST_JV_1_0_1788624031727",
+    "sno": 3,
+    "name": "PL 1",
+    "mobile": "546564",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "2500",
+    "payments": [
+      {
+        "monthIndex": 0,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 1,
+        "isPaid": true,
+        "paidDate": "2026-11-05"
+      },
+      {
+        "monthIndex": 2,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 3,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 4,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 5,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 6,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 7,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 8,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 9,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 10,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 11,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      }
+    ],
+    "withdrawal": {
+      "isWithdrawn": false,
+      "withdrawDate": null,
+      "disbursedBy": null,
+      "amount": 0
+    },
+    "createdAt": "2026-09-05T16:00:31.727Z"
+  },
+  {
+    "id": "CUST_JV_1_0_1788624055945",
+    "sno": 4,
+    "name": "PL 2.0",
+    "mobile": "6546",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "2500",
+    "payments": [
+      {
+        "monthIndex": 0,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 1,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 2,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 3,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 4,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 5,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 6,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 7,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 8,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 9,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 10,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 11,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      }
+    ],
+    "withdrawal": {
+      "isWithdrawn": false,
+      "withdrawDate": null,
+      "disbursedBy": null,
+      "amount": 0
+    },
+    "createdAt": "2026-09-05T16:00:55.945Z"
+  },
+  {
+    "id": "CUST_JV_1_0_1788624066785",
+    "sno": 5,
+    "name": "SSV 2.0",
+    "mobile": "6545",
+    "referral": "PLSSV",
+    "version": "JV_1.0",
+    "schemeType": "5000",
+    "payments": [
+      {
+        "monthIndex": 0,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 1,
+        "isPaid": true,
+        "paidDate": "2026-10-05"
+      },
+      {
+        "monthIndex": 2,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 3,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 4,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 5,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 6,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 7,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 8,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 9,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 10,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      },
+      {
+        "monthIndex": 11,
+        "isPaid": false,
+        "paidDate": null,
+        "amount": 0
+      }
+    ],
+    "withdrawal": {
+      "isWithdrawn": false,
+      "withdrawDate": null,
+      "disbursedBy": null,
+      "amount": 0
+    },
+    "createdAt": "2026-09-05T16:01:06.785Z"
+  }
+]

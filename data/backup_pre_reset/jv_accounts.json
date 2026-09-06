@@ -1,0 +1,58 @@
+{
+  "transfers": [
+    {
+      "id": "TRF_1788624748544_240",
+      "version": "JV_1.0",
+      "monthIndex": 0,
+      "entryType": "DR",
+      "fromReferral": "Varatha",
+      "toReferral": "PLSSV",
+      "isOutside": false,
+      "otherPartyName": null,
+      "otherRecipientName": null,
+      "otherSenderName": null,
+      "amount": 5000,
+      "date": "2026-09-05",
+      "notes": "Outward payout to PLSSV",
+      "createdAt": "2026-09-05T16:12:28.544Z"
+    }
+  ],
+  "disbursals": [
+    {
+      "id": "DISB_1788616784464_761",
+      "version": "JV_1.0",
+      "monthIndex": 0,
+      "customerId": "CUST_JV_1_0_1788611845068",
+      "customerName": "Sundar Rajan",
+      "disbursedBy": "PLSSV",
+      "amount": 12250,
+      "date": "2026-09-05",
+      "notes": "Auction payout for Month 1",
+      "createdAt": "2026-09-05T13:59:44.473Z"
+    },
+    {
+      "id": "DISB_1788624416697_359",
+      "version": "JV_1.0",
+      "monthIndex": 0,
+      "customerId": "CUST_JV_1_0_1788623872428",
+      "customerName": "sri",
+      "disbursedBy": "PLSSV",
+      "amount": 12250,
+      "date": "2026-10-05",
+      "notes": "Auction payout for Month 1",
+      "createdAt": "2026-09-05T16:06:56.697Z"
+    },
+    {
+      "id": "DISB_1788624476270_693",
+      "version": "JV_1.0",
+      "monthIndex": 0,
+      "customerId": "CUST_JV_1_0_1788623883156",
+      "customerName": "sabari",
+      "disbursedBy": "PLSSV",
+      "amount": 12250,
+      "date": "2026-11-05",
+      "notes": "Auction payout for Month 1",
+      "createdAt": "2026-09-05T16:07:56.271Z"
+    }
+  ]
+}

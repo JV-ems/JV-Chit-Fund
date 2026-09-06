@@ -1,0 +1,2879 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JayanVijayan Chit Fund - Official Digital Portal</title>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- React 18 & Babel via CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- SheetJS for Excel Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+
+  <!-- Load Config Matrix -->
+  <script src="chitConfig.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ==========================================
+    // EXCEL EXPORT HELPER FUNCTIONS
+    // ==========================================
+    function exportCustomersToExcel(customers, config, version, partnerName = null) {
+      if (!window.XLSX) return alert("Excel export library not loaded. Please check internet connection.");
+
+      const filteredCustomers = partnerName && partnerName !== 'All' ? customers.filter(c => c.referral === partnerName) : customers;
+
+      const headers = [
+        "S.No", "Customer Name", "Mobile Number", "Referral Partner", "JV Version", "Chit Plan (Rs.)"
+      ];
+
+      (config.months || []).forEach((m, idx) => {
+        headers.push(`M${idx+1} - ${m.name || `Month ${idx+1}`}`);
+      });
+
+      headers.push("Total Paid Months", "Auction Withdrawn?", "Withdrawal Date", "Disbursed By Partner", "Auction Amount (Rs.)");
+
+      const rows = [headers];
+
+      filteredCustomers.forEach(c => {
+        let paidCount = 0;
+        const row = [
+          c.sno || 1,
+          c.name || '',
+          c.mobile || '',
+          c.referral || '',
+          c.version || version,
+          c.schemeType || ''
+        ];
+
+        (config.months || []).forEach((m, idx) => {
+          const pay = c.payments && c.payments[idx];
+          if (pay && pay.isPaid) {
+            paidCount++;
+            row.push(pay.paidDate || 'Paid');
+          } else {
+            row.push('Unpaid');
+          }
+        });
+
+        row.push(
+          paidCount,
+          (c.withdrawal && c.withdrawal.isWithdrawn) ? 'YES' : 'NO',
+          (c.withdrawal && c.withdrawal.withdrawDate) || '-',
+          (c.withdrawal && c.withdrawal.disbursedBy) || '-',
+          (c.withdrawal && c.withdrawal.amount) || '-'
+        );
+
+        rows.push(row);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, `${version}_Customers`);
+      const fileName = partnerName && partnerName !== 'All' 
+        ? `JV_${version}_${partnerName}_Customers_${new Date().toISOString().split('T')[0]}.xlsx`
+        : `JV_${version}_All_Customers_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    }
+
+    async function exportAccountsToExcel(version, monthIndex, config, partnerFilter = null) {
+      if (!window.XLSX) return alert("Excel export library not loaded.");
+
+      try {
+        const res = await fetch(`/api/accounts/summary?version=${version}&monthIndex=${monthIndex}`);
+        const data = await res.json();
+        if (!data.success) return alert("Failed to fetch accounts data");
+
+        const summary = data.summary;
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Partner Balance Sheet
+        const balHeaders = ["Referral Partner", "Opening Balance (Rs.)", "Collections (CR Rs.)", "Inward Transfers (Rs.)", "Outside CR (Rs.)", "Auction Payouts (DR Rs.)", "Outward Transfers (Rs.)", "Outside DR (Rs.)", "Closing Balance (Rs.)", "Status"];
+        const balRows = [balHeaders];
+
+        const partnersToInclude = partnerFilter && partnerFilter !== 'All' 
+          ? summary.partnerBalances.filter(p => p.referral === partnerFilter) 
+          : summary.partnerBalances;
+
+        partnersToInclude.forEach(p => {
+          balRows.push([
+            p.referral,
+            p.openingBalance || 0,
+            p.collectionsCR || 0,
+            p.transfersIn || 0,
+            p.outsideCR || 0,
+            p.disbursalsDR || 0,
+            p.transfersOut || 0,
+            p.outsideDR || 0,
+            p.closingBalance || 0,
+            p.closingBalance === 0 ? "Balanced (Rs. 0)" : (p.closingBalance > 0 ? "Cash in Hand (Surplus)" : "Advance Paid (Deficit)")
+          ]);
+        });
+
+        if (!partnerFilter || partnerFilter === 'All') {
+          balRows.push([
+            "MONTH TOTAL",
+            "-",
+            summary.collectionsCR || 0,
+            "-",
+            summary.outsideCR || 0,
+            summary.disbursalsDR || 0,
+            "-",
+            summary.outsideDR || 0,
+            summary.masterNetDifference || 0,
+            summary.isMasterTallied ? (summary.isZeroNet ? "0 TALLIED (ZERO NET BALANCED)" : `0 TALLIED (BALANCED: NET RS. ${summary.masterNetDifference})`) : `DISCREPANCY (DIFF: Rs. ${Math.abs((summary.partnerClosingSum || 0) - summary.masterNetDifference)})`
+          ]);
+        }
+
+        const wsBal = XLSX.utils.aoa_to_sheet(balRows);
+        XLSX.utils.book_append_sheet(wb, wsBal, "Balance_Sheet");
+
+        // Sheet 2: Outside Transactions Spotlight
+        const outHeaders = ["Transfer ID", "Type", "Partner Involved", "Outside Person / Party", "Amount (Rs.)", "Date", "Notes"];
+        const outRows = [outHeaders];
+        (summary.outsideTransactions || []).forEach(t => {
+          outRows.push([
+            t.id,
+            t.entryType || (t.fromReferral === 'Others' ? 'CREDIT (INWARD)' : 'DEBIT (OUTWARD)'),
+            t.fromReferral === 'Others' ? t.toReferral : t.fromReferral,
+            t.outsidePersonName || 'Outside Party',
+            t.amount,
+            t.date,
+            t.notes || ''
+          ]);
+        });
+        const wsOut = XLSX.utils.aoa_to_sheet(outRows);
+        XLSX.utils.book_append_sheet(wb, wsOut, "Outside_Party_Transactions");
+
+        // Sheet 3: Fund Transfers Ledger
+        const trfHeaders = ["Transfer ID", "Type", "From Party", "To Party", "Is Outside?", "Amount (Rs.)", "Date", "Notes"];
+        const trfRows = [trfHeaders];
+        (summary.transfers || [])
+          .filter(t => !partnerFilter || partnerFilter === 'All' || t.fromReferral === partnerFilter || t.toReferral === partnerFilter)
+          .forEach(t => {
+            const sender = t.fromReferral === 'Others' ? `Others (${t.outsidePersonName || 'External'})` : t.fromReferral;
+            const dest = t.toReferral === 'Others' ? `Others (${t.outsidePersonName || 'External'})` : t.toReferral;
+            trfRows.push([t.id, t.entryType || 'TRANSFER', sender, dest, t.isOutside ? 'YES (OUTSIDE)' : 'NO', t.amount, t.date, t.notes || '']);
+          });
+        const wsTrf = XLSX.utils.aoa_to_sheet(trfRows);
+        XLSX.utils.book_append_sheet(wb, wsTrf, "All_Transfers");
+
+        // Sheet 4: Disbursals
+        const disbHeaders = ["Disbursal ID", "Customer Name", "Disbursed By Partner", "Amount (Rs.)", "Date", "Notes"];
+        const disbRows = [disbHeaders];
+        (summary.disbursals || [])
+          .filter(d => !partnerFilter || partnerFilter === 'All' || d.disbursedBy === partnerFilter)
+          .forEach(d => {
+            disbRows.push([d.id, d.customerName, d.disbursedBy, d.amount, d.date, d.notes || '']);
+          });
+        const wsDisb = XLSX.utils.aoa_to_sheet(disbRows);
+        XLSX.utils.book_append_sheet(wb, wsDisb, "Auction_Disbursals_DR");
+
+        const mName = summary.monthInfo ? (summary.monthInfo.name || `Month_${monthIndex+1}`) : `Month_${monthIndex+1}`;
+        const prefix = partnerFilter && partnerFilter !== 'All' ? `${partnerFilter}_` : '';
+        XLSX.writeFile(wb, `JV_${version}_${prefix}Accounts_${mName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } catch(e) {
+        alert("Error generating accounts excel file");
+      }
+    }
+
+    async function exportMasterBalanceSheetToExcel(version = 'Overall', monthIndex = 0) {
+      if (!window.XLSX) return alert("Excel export library not loaded.");
+      try {
+        const res = await fetch(`/api/accounts/master-balance-sheet?version=${version}&monthIndex=${monthIndex}`);
+        const data = await res.json();
+        if (!data.success) return alert("Failed to fetch master balance sheet");
+
+        const summary = data.summary;
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Master Balance Sheet
+        const balHeaders = ["Referral Partner", "Opening Balance (Rs.)", "Collections (CR Rs.)", "Inward Transfers (Rs.)", "Outside CR (Rs.)", "Auction Payouts (DR Rs.)", "Outward Transfers (Rs.)", "Outside DR (Rs.)", "Closing Balance (Rs.)", "Status"];
+        const balRows = [balHeaders];
+
+        (summary.partnerBalances || []).forEach(p => {
+          balRows.push([
+            p.referral,
+            p.openingBalance || 0,
+            p.collectionsCR || 0,
+            p.transfersIn || 0,
+            p.outsideCR || 0,
+            p.disbursalsDR || 0,
+            p.transfersOut || 0,
+            p.outsideDR || 0,
+            p.closingBalance || 0,
+            p.closingBalance === 0 ? "Balanced (Rs. 0)" : (p.closingBalance > 0 ? "Cash in Hand (Surplus)" : "Advance Paid (Deficit)")
+          ]);
+        });
+
+        balRows.push([
+          `MASTER SYSTEM TOTAL (${version.replace('_', ' ')})`,
+          "-",
+          summary.collectionsCR || 0,
+          "-",
+          summary.outsideCR || 0,
+          summary.disbursalsDR || 0,
+          "-",
+          summary.outsideDR || 0,
+          summary.masterNetDifference || 0,
+          summary.isMasterTallied ? (summary.isZeroNet ? "0 TALLIED (ZERO NET BALANCED)" : `0 TALLIED (BALANCED: NET RS. ${summary.masterNetDifference})`) : `DISCREPANCY (DIFF: Rs. ${Math.abs((summary.partnerClosingSum || 0) - summary.masterNetDifference)})`
+        ]);
+
+        const wsBal = XLSX.utils.aoa_to_sheet(balRows);
+        XLSX.utils.book_append_sheet(wb, wsBal, "Master_Balance_Sheet");
+
+        // Sheet 2: Outside Transactions
+        const outHeaders = ["Transfer ID", "Entry Type", "Partner Involved", "Outside Party / Person", "Amount (Rs.)", "Date", "Notes"];
+        const outRows = [outHeaders];
+        (summary.outsideTransactions || []).forEach(t => {
+          outRows.push([
+            t.id,
+            t.entryType || (t.fromReferral === 'Others' ? 'CREDIT (INWARD)' : 'DEBIT (OUTWARD)'),
+            t.fromReferral === 'Others' ? t.toReferral : t.fromReferral,
+            t.outsidePersonName || 'Outside Party',
+            t.amount,
+            t.date,
+            t.notes || ''
+          ]);
+        });
+        const wsOut = XLSX.utils.aoa_to_sheet(outRows);
+        XLSX.utils.book_append_sheet(wb, wsOut, "Outside_Party_Ledger");
+
+        // Sheet 3: Complete Cashbook
+        const trfHeaders = ["Transfer ID", "Type", "From Party", "To Party", "Is Outside?", "Amount (Rs.)", "Date", "Notes"];
+        const trfRows = [trfHeaders];
+        (summary.transfers || []).forEach(t => {
+          const sender = t.fromReferral === 'Others' ? `Others (${t.outsidePersonName || 'External'})` : t.fromReferral;
+          const dest = t.toReferral === 'Others' ? `Others (${t.outsidePersonName || 'External'})` : t.toReferral;
+          trfRows.push([t.id, t.entryType || 'TRANSFER', sender, dest, t.isOutside ? 'YES (OUTSIDE)' : 'NO', t.amount, t.date, t.notes || '']);
+        });
+        const wsTrf = XLSX.utils.aoa_to_sheet(trfRows);
+        XLSX.utils.book_append_sheet(wb, wsTrf, "Cashbook_Transfers");
+
+        // Sheet 4: Auction Payouts
+        const disbHeaders = ["Disbursal ID", "Customer Name", "Disbursed By Partner", "Amount (Rs.)", "Date", "Notes"];
+        const disbRows = [disbHeaders];
+        (summary.disbursals || []).forEach(d => {
+          disbRows.push([d.id, d.customerName, d.disbursedBy, d.amount, d.date, d.notes || '']);
+        });
+        const wsDisb = XLSX.utils.aoa_to_sheet(disbRows);
+        XLSX.utils.book_append_sheet(wb, wsDisb, "Auction_Disbursals_DR");
+
+        XLSX.writeFile(wb, `JV_Master_Balance_Sheet_${version}_M${parseInt(monthIndex)+1}_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } catch(e) {
+        alert("Error generating master balance sheet excel");
+      }
+    }
+
+    async function exportMasterConsolidatedExcel() {
+      if (!window.XLSX) return alert("Excel export library not loaded.");
+      try {
+        const res = await fetch('/api/master/consolidated-summary');
+        const data = await res.json();
+        if (!data.success) return alert("Failed to fetch master summary");
+
+        const wb = XLSX.utils.book_new();
+
+        const pHeaders = ["Referral Partner", "Total Customers (All Versions)", "Total Collections CR (Rs.)", "Total Payouts DR (Rs.)", "Net Balance (Rs.)", "Pending Members", "Withdrawn Members"];
+        const pRows = [pHeaders];
+        data.summary.partnerOverview.forEach(p => {
+          pRows.push([
+            p.referral,
+            p.totalCustomers,
+            p.totalCR,
+            p.totalDR,
+            p.totalCR - p.totalDR,
+            p.pendingCount,
+            p.withdrawnCount
+          ]);
+        });
+        pRows.push([
+          "ALL-JV OVERALL TOTAL",
+          data.summary.totalAllCustomers,
+          data.summary.overallAllJVCR,
+          data.summary.overallAllJVDR,
+          data.summary.netAllJVBalance,
+          "-",
+          data.summary.totalAllWithdrawn
+        ]);
+
+        const wsOverview = XLSX.utils.aoa_to_sheet(pRows);
+        XLSX.utils.book_append_sheet(wb, wsOverview, "Master_All_JV_Overview");
+
+        XLSX.writeFile(wb, `JV_Master_Consolidated_Financial_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+      } catch (e) {
+        alert("Error generating master excel");
+      }
+    }
+
+    // ==========================================
+    // MAIN APP COMPONENT
+    // ==========================================
+    function App() {
+      const [user, setUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('jv_logged_user');
+          return saved ? JSON.parse(saved) : null;
+        } catch (e) { return null; }
+      });
+
+      const [configs, setConfigs] = useState(window.CHIT_CONFIGS || {});
+      const [coreReferrals, setCoreReferrals] = useState(window.CORE_REFERRALS || ['PLSSV', 'Arun', 'Varatha', 'Ramana', 'Vicky']);
+      const isMasterAdmin = user && user.role === 'admin' && user.username === 'admin';
+      const isPartnerAdmin = user && user.role === 'admin' && user.username !== 'admin';
+
+      const [selectedVersion, setSelectedVersion] = useState(isMasterAdmin ? 'Overall' : 'JV_1.0');
+      const [currentTab, setCurrentTab] = useState(isMasterAdmin ? 'master_overview' : 'passbook');
+
+      const [customers, setCustomers] = useState([]);
+      const [isLoading, setIsLoading] = useState(false);
+
+      useEffect(() => {
+        fetch('/api/config')
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setConfigs(data.configs);
+              setCoreReferrals(data.coreReferrals);
+            }
+          })
+          .catch(e => console.log("Using local config matrix"));
+      }, []);
+
+      const loadCustomers = async () => {
+        if (!user) return;
+        setIsLoading(true);
+        try {
+          const fetchVer = (selectedVersion === 'Overall') ? 'JV_1.0' : selectedVersion;
+          const res = await fetch(`/api/customers?version=${fetchVer}`);
+          const data = await res.json();
+          if (data.success) {
+            setCustomers(data.customers);
+          }
+        } catch (e) {
+          console.error("Error loading customers", e);
+        }
+        setIsLoading(false);
+      };
+
+      useEffect(() => {
+        if (user) {
+          loadCustomers();
+        }
+      }, [user, selectedVersion]);
+
+      const handleLoginSuccess = (loggedInUser, customerData) => {
+        setUser(loggedInUser);
+        localStorage.setItem('jv_logged_user', JSON.stringify(loggedInUser));
+        if (loggedInUser.username === 'admin') {
+          setSelectedVersion('Overall');
+          setCurrentTab('master_overview');
+        } else {
+          setSelectedVersion('JV_1.0');
+          setCurrentTab('passbook');
+        }
+      };
+
+      const handleLogout = () => {
+        setUser(null);
+        localStorage.removeItem('jv_logged_user');
+      };
+
+      if (!user) {
+        return (
+          <LoginScreen
+            coreReferrals={coreReferrals}
+            onLoginSuccess={handleLoginSuccess}
+          />
+        );
+      }
+
+      const activeConfig = configs[selectedVersion] || configs['JV_1.0'] || configs['JV_3.0'] || {};
+      const versionOptions = isMasterAdmin ? ['Overall', ...Object.keys(configs)] : Object.keys(configs);
+
+      return (
+        <div className="app-container fade-in">
+          {/* Top Navbar Header */}
+          <div className="header-nav">
+            <div className="logo-area">
+              <img src="assests/logo.png" alt="JayanVijayan Logo" className="app-brand-logo" />
+              <div className="logo-text-group">
+                <h1>JV Chit Fund</h1>
+                <p>{selectedVersion === 'Overall' ? 'Overall All-JV Overview' : (activeConfig.welcomeText || selectedVersion)} • Since {activeConfig.since || '2025'}</p>
+              </div>
+            </div>
+
+            <div className="controls">
+              <div className={`user-badge ${isMasterAdmin ? 'master-admin-badge' : ''}`}>
+                <span>{isMasterAdmin ? '👑' : '👤'}</span>
+                <span>
+                  {isMasterAdmin ? 'JV Admin Panel' : `${user.username || user.name}`}
+                </span>
+              </div>
+
+              <button className="danger" onClick={handleLogout}>
+                🚪 Logout
+              </button>
+            </div>
+          </div>
+
+          {/* Version Selector */}
+          {user.role === 'admin' && (
+            <div className="version-bar">
+              <strong style={{ color: '#0b1f3a', fontSize: '14px', marginRight: '6px' }}>Chit Scheme Version:</strong>
+              {versionOptions.map(v => (
+                <div
+                  key={v}
+                  className={`version-pill ${selectedVersion === v ? 'active' : ''}`}
+                  onClick={() => setSelectedVersion(v)}
+                >
+                  {v === 'Overall' ? '🌐 Overall' : `✨ ${v}`}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Navigation Tabs based on Role */}
+          <div className="tabs" style={{ marginBottom: '22px' }}>
+            {/* MASTER ADMIN TABS (Overview, Partner Inspector, Master Accounts) */}
+            {isMasterAdmin && (
+              <>
+                <button
+                  className={`tabbtn ${currentTab === 'master_overview' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('master_overview')}
+                >
+                  🏢 JV Admin Overview
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'partner_inspector' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('partner_inspector')}
+                  style={{ background: currentTab === 'partner_inspector' ? '#059669' : '#ffffff', color: currentTab === 'partner_inspector' ? '#ffffff' : '#059669' }}
+                >
+                  👥 Person Inspector
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'master_accounts' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('master_accounts')}
+                  style={{ background: currentTab === 'master_accounts' ? '#4f46e5' : '#ffffff', color: currentTab === 'master_accounts' ? '#ffffff' : '#4f46e5' }}
+                >
+                  📒 JV Admin Balance Sheet
+                </button>
+              </>
+            )}
+
+            {/* INDIVIDUAL REFERRAL PARTNER TABS */}
+            {isPartnerAdmin && (
+              <>
+                <button
+                  className={`tabbtn ${currentTab === 'passbook' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('passbook')}
+                >
+                  📖 Customer's Records ({user.referral})
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'accounts' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('accounts')}
+                  style={{ background: currentTab === 'accounts' ? '#059669' : '#ffffff', color: currentTab === 'accounts' ? '#ffffff' : '#059669' }}
+                >
+                  📒 My Balance Sheet ({user.referral})
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'add_customer' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('add_customer')}
+                >
+                  ➕ Add Customer
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'payment_admin' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('payment_admin')}
+                >
+                  ✍️ Record Payment
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'reports' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('reports')}
+                >
+                  📊 Scheme Report
+                </button>
+              </>
+            )}
+
+            {/* CUSTOMER TAB */}
+            {user.role === 'customer' && (
+              <button className="tabbtn active">
+                📖 Customer's Records
+              </button>
+            )}
+          </div>
+
+          {/* Main View Container */}
+          <div className="view-container">
+            {/* 1. MASTER ADMIN OVERVIEW */}
+            {currentTab === 'master_overview' && isMasterAdmin && (
+              <MasterAdminOverviewView
+                config={activeConfig}
+                version={selectedVersion}
+                coreReferrals={coreReferrals}
+              />
+            )}
+
+            {/* 2. MASTER ADMIN PARTNER INSPECTOR */}
+            {currentTab === 'partner_inspector' && isMasterAdmin && (
+              <MasterPartnerInspectorView
+                configs={configs}
+                coreReferrals={coreReferrals}
+                version={selectedVersion}
+              />
+            )}
+
+            {/* 2B. MASTER ACCOUNTS & BALANCE SHEET */}
+            {currentTab === 'master_accounts' && isMasterAdmin && (
+              <MasterAccountsBalanceSheetView
+                configs={configs}
+                coreReferrals={coreReferrals}
+                version={selectedVersion}
+              />
+            )}
+
+            {/* 3. PASSBOOK VIEW */}
+            {currentTab === 'passbook' && (
+              <CustomerPassbookView
+                user={user}
+                config={activeConfig}
+                version={selectedVersion}
+                customers={customers}
+                coreReferrals={coreReferrals}
+              />
+            )}
+
+            {/* 4. ADD CUSTOMER */}
+            {currentTab === 'add_customer' && user.role === 'admin' && (
+              <AddCustomerView
+                user={user}
+                configs={configs}
+                selectedVersion={selectedVersion}
+                setSelectedVersion={setSelectedVersion}
+                coreReferrals={coreReferrals}
+                onCustomerAdded={() => {
+                  loadCustomers();
+                  setCurrentTab('passbook');
+                }}
+              />
+            )}
+
+            {/* 5. PAYMENT ADMIN */}
+            {currentTab === 'payment_admin' && user.role === 'admin' && (
+              <AdminPaymentUpdatesView
+                user={user}
+                config={activeConfig}
+                version={selectedVersion}
+                customers={customers}
+                coreReferrals={coreReferrals}
+                refreshData={loadCustomers}
+              />
+            )}
+
+            {/* 6. INDIVIDUAL PARTNER BALANCE SHEET */}
+            {currentTab === 'accounts' && isPartnerAdmin && (
+              <PartnerIndividualBalanceSheetView
+                user={user}
+                config={activeConfig}
+                version={selectedVersion}
+                coreReferrals={coreReferrals}
+              />
+            )}
+
+            {/* 7. REPORTS */}
+            {currentTab === 'reports' && user.role === 'admin' && (
+              <ReportsView
+                user={user}
+                config={activeConfig}
+                version={selectedVersion}
+                coreReferrals={coreReferrals}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // LOGIN SCREEN
+    // ==========================================
+    function LoginScreen({ coreReferrals, onLoginSuccess }) {
+      const [adminUser, setAdminUser] = useState(coreReferrals[0] || 'PLSSV');
+      const [password, setPassword] = useState('');
+      const [errorMsg, setErrorMsg] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setErrorMsg('');
+        setIsLoading(true);
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: adminUser, password })
+          });
+          const data = await res.json();
+          if (data.success) {
+            onLoginSuccess(data.user, data.customer);
+          } else {
+            setErrorMsg(data.message || 'Invalid login details');
+          }
+        } catch (e) {
+          setErrorMsg('Server connection failed. Make sure node server is running.');
+        }
+        setIsLoading(false);
+      };
+
+      return (
+        <div className="login-screen">
+          <div className="login-card fade-in">
+            <img src="assests/logo.png" alt="JV Logo" style={{ width: '84px', height: '84px', borderRadius: '50%', border: '3px solid #d4af37', boxShadow: '0 6px 20px rgba(212, 175, 55, 0.35)', margin: '0 auto 12px auto' }} />
+            <h2>JV Chit Fund</h2>
+            <p>Save Monthly, Grow Yearly</p>
+
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px', textAlign: 'left', marginTop: '16px' }}>
+              <div className="form-group">
+                <label>Choose Login Identity</label>
+                <select value={adminUser} onChange={e => setAdminUser(e.target.value)}>
+                  <optgroup label="👑 JV Administrator">
+                    <option value="admin">JV Admin</option>
+                  </optgroup>
+                  <optgroup label="👤 Persons">
+                    {coreReferrals.map(r => <option key={r} value={r}>{r}</option>)}
+                  </optgroup>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                />
+                <small style={{ color: '#64748b', fontSize: '11px', marginTop: '2px' }}>
+                  {adminUser === 'admin' ? 'Default: admin123' : 'Partner Default: 1234'}
+                </small>
+              </div>
+
+              {errorMsg && (
+                <div style={{ color: '#dc2626', background: '#fee2e2', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                  ⚠️ {errorMsg}
+                </div>
+              )}
+
+              <button type="submit" disabled={isLoading} style={{ marginTop: '8px', padding: '12px' }}>
+                {isLoading ? 'Authenticating...' : 'Sign In'}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MASTER ADMIN OVERVIEW
+    // ==========================================
+    function MasterAdminOverviewView({ config, version, coreReferrals }) {
+      const [summary, setSummary] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      const isOverall = !version || version === 'Overall';
+      const displayVersionName = isOverall ? 'Overall All-JV' : version.replace('_', ' ');
+
+      useEffect(() => {
+        setIsLoading(true);
+        const queryVer = version ? `?version=${version}` : '';
+        fetch(`/api/master/consolidated-summary${queryVer}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setSummary(data.summary);
+            }
+          })
+          .catch(e => console.error(e))
+          .finally(() => setIsLoading(false));
+      }, [version]);
+
+      if (isLoading || !summary) {
+        return <div style={{ textAlign: 'center', padding: '40px' }}>Loading Master Consolidated Analytics ({displayVersionName})...</div>;
+      }
+
+      return (
+        <div className="fade-in">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+            <div>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a' }}>
+                👑 Master {displayVersionName} Financial Dashboard
+              </h2>
+              <p style={{ fontSize: '13px', color: '#64748b' }}>
+                {isOverall
+                  ? 'Consolidated supervisory oversight across all JV versions combined (JV 1.0, 2.0, 3.0) and all 5 Referral Partners'
+                  : `Supervisory financial standing and member metrics specifically for ${displayVersionName}`}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="success"
+              onClick={exportMasterConsolidatedExcel}
+              style={{ padding: '10px 20px', fontSize: '14px' }}
+            >
+              📥 Export Master All-JV Report (Excel)
+            </button>
+          </div>
+
+          {/* Master KPIs */}
+          <div className="tally-card">
+            <div className="tally-stats-grid">
+              <div className="tally-stat-box">
+                <h4>🟢 Collections (CR) - {displayVersionName}</h4>
+                <div className="amount">Rs. {summary.overallAllJVCR.toLocaleString('en-IN')}</div>
+                <small style={{ color: '#dcfce7' }}>{isOverall ? 'Collected across all versions' : `Collected under ${displayVersionName}`}</small>
+              </div>
+
+              <div className="tally-stat-box">
+                <h4>🔴 Payouts (DR) - {displayVersionName}</h4>
+                <div className="amount">Rs. {summary.overallAllJVDR.toLocaleString('en-IN')}</div>
+                <small style={{ color: '#fecaca' }}>{isOverall ? 'Disbursed across all versions' : `Disbursed under ${displayVersionName}`}</small>
+              </div>
+
+              <div className="tally-stat-box">
+                <h4>⚖️ Net Cash Balance - {displayVersionName}</h4>
+                <div className="amount" style={{ color: summary.netAllJVBalance >= 0 ? '#86efac' : '#fca5a5' }}>
+                  Rs. {summary.netAllJVBalance.toLocaleString('en-IN')}
+                </div>
+                <small style={{ color: '#e0f2fe' }}>Surplus / Deficit</small>
+              </div>
+
+              <div className="tally-stat-box">
+                <h4>👥 Members & Withdrawn - {displayVersionName}</h4>
+                <div className="amount" style={{ fontSize: '20px' }}>
+                  {summary.totalAllCustomers} Members / {summary.totalAllWithdrawn} Withdrawn
+                </div>
+                <small style={{ color: '#fef08a' }}>{isOverall ? 'Across all versions' : `In ${displayVersionName}`}</small>
+              </div>
+            </div>
+          </div>
+
+          {/* 5 Referral Partners Overview Table */}
+          <div className="admin-card">
+            <h3 className="admin-title">👥 Partner Financial Standings ({displayVersionName})</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="ledger-table">
+                <thead>
+                  <tr>
+                    <th>Referral Partner</th>
+                    <th>Total Customers</th>
+                    <th>Total Collections (CR)</th>
+                    <th>Total Payouts (DR)</th>
+                    <th>Net Balance</th>
+                    <th>Pending Members</th>
+                    <th>Withdrawn Members</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.partnerOverview.map(p => (
+                    <tr key={p.referral}>
+                      <td style={{ fontWeight: '800', color: '#0b1f3a', fontSize: '15px' }}>👤 {p.referral}</td>
+                      <td style={{ fontWeight: '700' }}>{p.totalCustomers}</td>
+                      <td style={{ color: '#15803d', fontWeight: '800' }}>Rs. {p.totalCR.toLocaleString('en-IN')}</td>
+                      <td style={{ color: '#b91c1c', fontWeight: '800' }}>Rs. {p.totalDR.toLocaleString('en-IN')}</td>
+                      <td style={{ fontWeight: '800', color: (p.totalCR - p.totalDR) >= 0 ? '#0284c7' : '#b91c1c' }}>
+                        Rs. {(p.totalCR - p.totalDR).toLocaleString('en-IN')}
+                      </td>
+                      <td>
+                        <span style={{ background: p.pendingCount > 0 ? '#fff7ed' : '#f0fdf4', color: p.pendingCount > 0 ? '#c2410c' : '#15803d', padding: '4px 10px', borderRadius: '12px', fontWeight: '800', fontSize: '12px' }}>
+                          {p.pendingCount} Pending
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px', fontWeight: '800', fontSize: '12px' }}>
+                          🎉 {p.withdrawnCount} Withdrawn
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MASTER ADMIN PARTNER INSPECTOR
+    // ==========================================
+    function MasterPartnerInspectorView({ configs, coreReferrals, version }) {
+      const [selectedPartner, setSelectedPartner] = useState('Overall');
+      const [analytics, setAnalytics] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      const fetchAnalytics = () => {
+        setIsLoading(true);
+        const queryVer = version ? `&version=${version}` : '';
+        fetch(`/api/master/partner-analytics?referral=${selectedPartner}${queryVer}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) setAnalytics(data.analytics);
+          })
+          .catch(e => console.error(e))
+          .finally(() => setIsLoading(false));
+      };
+
+      useEffect(() => {
+        fetchAnalytics();
+      }, [selectedPartner, version]);
+
+      const partnerTabs = ['Overall', ...coreReferrals];
+
+      return (
+        <div className="fade-in">
+          {/* Partner Selector Header */}
+          <div className="master-inspector-header">
+            <strong style={{ color: '#0b1f3a', fontSize: '15px' }}>🔍 Inspect Person:</strong>
+            {partnerTabs.map(r => (
+              <button
+                key={r}
+                className={`tabbtn ${selectedPartner === r ? 'active' : ''}`}
+                style={{ fontSize: '14px', padding: '8px 18px' }}
+                onClick={() => setSelectedPartner(r)}
+              >
+                {r === 'Overall' ? '🌐 Overall (All)' : `👤 ${r}`}
+              </button>
+            ))}
+          </div>
+
+          {isLoading || !analytics ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>Loading {selectedPartner}'s Detailed File...</div>
+          ) : (
+            <div>
+              {/* Partner Overview Stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+                <div className="partner-card">
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>
+                    {version && version !== 'Overall' ? `${version.replace('_', ' ')} Collections (CR)` : 'Overall Collections (CR)'}
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#15803d', marginTop: '6px' }}>
+                    Rs. {analytics.overallCR.toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>
+                    {version && version !== 'Overall' ? `Collected under ${version.replace('_', ' ')}` : 'All JV Versions combined'}
+                  </small>
+                </div>
+
+                <div className="partner-card">
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>
+                    {version && version !== 'Overall' ? `${version.replace('_', ' ')} Payouts (DR)` : 'Overall Payouts (DR)'}
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#b91c1c', marginTop: '6px' }}>
+                    Rs. {analytics.overallDR.toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Disbursed by {selectedPartner}</small>
+                </div>
+
+                <div className="partner-card">
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Total Members</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a', marginTop: '6px' }}>
+                    {analytics.totalCustomers} Customers
+                  </div>
+                  <small style={{ color: '#64748b' }}>Under {selectedPartner}</small>
+                </div>
+
+                <div className="partner-card">
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Inter-Partner Transfers</div>
+                  <div style={{ fontSize: '18px', fontWeight: '900', color: '#d97706', marginTop: '6px' }}>
+                    +Rs. {analytics.transfers.totalReceived} / -Rs. {analytics.transfers.totalSent}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Received / Sent</small>
+                </div>
+              </div>
+
+              {/* Version-wise breakdown (shown ONLY when a specific version is inspected or non-Overall) */}
+              {version && version !== 'Overall' && analytics.versionBreakdown && analytics.versionBreakdown.length > 0 && (
+                <div className="admin-card">
+                  <h3 className="admin-title">📊 {version.replace('_', ' ')} Summary ({selectedPartner})</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                    {analytics.versionBreakdown.map(vb => (
+                      <div key={vb.version} style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1.5px solid #e2e8f0' }}>
+                        <h4 style={{ color: '#0b1f3a', fontWeight: '900', marginBottom: '10px' }}>✨ {vb.version}</h4>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+                          <span>Members:</span> <strong>{vb.customerCount}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#15803d', marginBottom: '6px' }}>
+                          <span>Collections (CR):</span> <strong>Rs. {vb.collectionsCR.toLocaleString('en-IN')}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#b91c1c' }}>
+                          <span>Payouts (DR):</span> <strong>Rs. {vb.payoutsDR.toLocaleString('en-IN')}</strong>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ⚠️ Pending Collections Alert Box */}
+              {analytics.pendingCustomers.length > 0 && (
+                <div className="admin-card" style={{ background: '#fff7ed', borderColor: '#fed7aa' }}>
+                  <h3 style={{ color: '#c2410c', fontWeight: '900', fontSize: '18px', marginBottom: '12px' }}>
+                    ⚠️ Pending Collections ({analytics.pendingCustomers.length} Members Have Unpaid Installments)
+                  </h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="ledger-table" style={{ background: '#ffffff' }}>
+                      <thead>
+                        <tr>
+                          <th>Customer Name</th>
+                          <th>Version & Plan</th>
+                          <th>Mobile Number</th>
+                          <th>Unpaid Months Count</th>
+                          <th>Total Pending Due</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.pendingCustomers.map(c => (
+                          <tr key={c.id}>
+                            <td style={{ fontWeight: '800', color: '#0b1f3a' }}>👤 {c.name}</td>
+                            <td>{c.version} — Rs.{c.schemeType}</td>
+                            <td><strong>{c.mobile || 'N/A'}</strong></td>
+                            <td style={{ color: '#c2410c', fontWeight: '700' }}>{c.unpaidCount} Months</td>
+                            <td style={{ color: '#b91c1c', fontWeight: '900' }}>Rs. {c.totalDue.toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Full Customers List */}
+              <div className="admin-card">
+                <h3 className="admin-title">👥 All Customer Profiles under {selectedPartner}</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="ledger-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Mobile</th>
+                        <th>Version</th>
+                        <th>Plan</th>
+                        <th>Paid Months</th>
+                        <th>Auction Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analytics.customers.map((c, i) => (
+                        <tr key={c.id}>
+                          <td>{i + 1}</td>
+                          <td style={{ fontWeight: '800', color: '#0b1f3a' }}>{c.name}</td>
+                          <td>{c.mobile || '-'}</td>
+                          <td><span className="version-pill active" style={{ padding: '3px 10px', fontSize: '11px' }}>{c.version}</span></td>
+                          <td style={{ fontWeight: '700' }}>Rs. {c.schemeType}</td>
+                          <td style={{ fontWeight: '700', color: c.paidMonthsCount > 0 ? '#15803d' : '#64748b' }}>
+                            {c.paidMonthsCount} / {c.totalMonths} Paid
+                          </td>
+                          <td>
+                            {c.withdrawal && c.withdrawal.isWithdrawn ? (
+                              <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '4px 10px', borderRadius: '12px', fontWeight: '800', fontSize: '12px' }}>
+                                🎉 Withdrawn ({c.withdrawal.withdrawDate})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#94a3b8', fontSize: '12px' }}>Active</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MASTER ADMIN: ACCOUNTS & BALANCE SHEET TALLY
+    // ==========================================
+    function MasterAccountsBalanceSheetView({ configs, coreReferrals, version }) {
+      const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
+      const [selectedVersion, setSelectedVersion] = useState(version || 'Overall');
+      const [summary, setSummary] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      const activeConfig = configs[selectedVersion] || configs['JV_1.0'] || configs['JV_3.0'] || {};
+      const monthsList = activeConfig.months || [
+        { name: 'Month 1' }, { name: 'Month 2' }, { name: 'Month 3' }, { name: 'Month 4' },
+        { name: 'Month 5' }, { name: 'Month 6' }, { name: 'Month 7' }, { name: 'Month 8' },
+        { name: 'Month 9' }, { name: 'Month 10' }, { name: 'Month 11' }, { name: 'Month 12' }
+      ];
+
+      const fetchMasterBalance = () => {
+        setIsLoading(true);
+        fetch(`/api/accounts/master-balance-sheet?version=${selectedVersion}&monthIndex=${selectedMonthIndex}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) setSummary(data.summary);
+          })
+          .catch(e => console.error(e))
+          .finally(() => setIsLoading(false));
+      };
+
+      useEffect(() => {
+        fetchMasterBalance();
+      }, [selectedVersion, selectedMonthIndex]);
+
+      const handleDeleteTransfer = async (id) => {
+        if (!confirm("Are you sure you want to delete this cash entry?")) return;
+        await fetch('/api/accounts/transfers', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transferId: id })
+        });
+        fetchMasterBalance();
+      };
+
+      const displayVerName = selectedVersion === 'Overall' ? 'Overall All-JV' : selectedVersion.replace('_', ' ');
+      const currentMonthName = monthsList[selectedMonthIndex]?.name || `Month ${selectedMonthIndex + 1}`;
+
+      return (
+        <div className="fade-in">
+          {/* Header & Controls */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '22px' }}>
+            <div>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📒</span>
+                <span>Master Accounts & Balance Sheet ({displayVerName})</span>
+              </h2>
+              <p style={{ fontSize: '13px', color: '#64748b' }}>
+                Supervisory multi-partner cash clearing, outside fund transactions, and 0-Tally verification.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#ffffff', padding: '6px 12px', borderRadius: '10px', border: '1.5px solid #cbd5e1' }}>
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#0b1f3a' }}>Month:</span>
+                <select
+                  value={selectedMonthIndex}
+                  onChange={e => setSelectedMonthIndex(parseInt(e.target.value))}
+                  style={{ border: 'none', background: 'transparent', fontWeight: '800', fontSize: '13px', color: '#4f46e5', cursor: 'pointer', outline: 'none' }}
+                >
+                  {monthsList.map((mObj, idx) => (
+                    <option key={idx} value={idx}>
+                      M{idx + 1} - {mObj.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                className="success"
+                onClick={() => exportMasterBalanceSheetToExcel(selectedVersion, selectedMonthIndex)}
+                style={{ padding: '9px 16px', fontSize: '13px' }}
+              >
+                📥 Export Master Balance Sheet (Excel)
+              </button>
+            </div>
+          </div>
+
+          {isLoading || !summary ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>Loading Master Balance Sheet & Accounts Ledger...</div>
+          ) : (
+            <div>
+              {/* Fintech 4-Box KPI Grid */}
+              <div className="fintech-kpi-grid">
+                <div className="fintech-kpi-card kpi-cr">
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#059669', textTransform: 'uppercase' }}>🟢 Chit Collections (CR)</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#15803d', marginTop: '6px' }}>
+                    Rs. {(summary.collectionsCR || 0).toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Installments collected ({currentMonthName})</small>
+                </div>
+
+                <div className="fintech-kpi-card kpi-outside">
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#7c3aed', textTransform: 'uppercase' }}>⚡ Outside Inward (CR)</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#7c3aed', marginTop: '6px' }}>
+                    Rs. {(summary.outsideCR || 0).toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>From Outside Financiers / Creditors</small>
+                </div>
+
+                <div className="fintech-kpi-card kpi-dr">
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#dc2626', textTransform: 'uppercase' }}>🔴 Auction Disbursals (DR)</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#b91c1c', marginTop: '6px' }}>
+                    Rs. {(summary.disbursalsDR || 0).toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Disbursed to Chit Winners ({currentMonthName})</small>
+                </div>
+
+                <div className="fintech-kpi-card kpi-outside">
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: '#d97706', textTransform: 'uppercase' }}>⚡ Outside Outward (DR)</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#d97706', marginTop: '6px' }}>
+                    Rs. {(summary.outsideDR || 0).toLocaleString('en-IN')}
+                  </div>
+                  <small style={{ color: '#64748b' }}>Sent to Outside Vendors / Debtors</small>
+                </div>
+              </div>
+
+              {/* Master Tally Status Bar */}
+              <div className="tally-card" style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', color: '#e2e8f0', fontWeight: '800' }}>
+                      ⚖️ System Clearing & Tally Status ({currentMonthName} • {displayVerName})
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '14px', marginTop: '8px' }}>
+                      <span style={{ fontSize: '20px', fontWeight: '900', color: '#86efac' }}>
+                        Total CR: Rs. {summary.totalMonthCR.toLocaleString('en-IN')}
+                      </span>
+                      <span style={{ color: '#cbd5e1', fontWeight: '700' }}>vs</span>
+                      <span style={{ fontSize: '20px', fontWeight: '900', color: '#fca5a5' }}>
+                        Total DR: Rs. {summary.totalMonthDR.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    {summary.isZeroNet ? (
+                      <span className="tally-badge-tallied">
+                        <span>✨</span>
+                        <span>0 TALLIED (ZERO NET BALANCED)</span>
+                      </span>
+                    ) : summary.isMasterTallied ? (
+                      <span className="tally-badge-tallied">
+                        <span>✨</span>
+                        <span>0 TALLIED (BALANCED: NET RS. {summary.masterNetDifference.toLocaleString('en-IN')})</span>
+                      </span>
+                    ) : (
+                      <span className="tally-badge-untallied">
+                        <span>⚠️</span>
+                        <span>DISCREPANCY (DIFF: Rs. {Math.abs((summary.partnerClosingSum || 0) - summary.masterNetDifference).toLocaleString('en-IN')})</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Partner Balance Sheet Table */}
+              <div className="admin-card" style={{ marginBottom: '24px' }}>
+                <h3 className="admin-title">👥 Partner Financial Standings & Cash Clearings ({currentMonthName})</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="ledger-table">
+                    <thead>
+                      <tr>
+                        <th>Referral Partner</th>
+                        <th>Opening Balance</th>
+                        <th>Collections (CR)</th>
+                        <th>Inward Transfers</th>
+                        <th>Outside CR</th>
+                        <th>Auction Payouts (DR)</th>
+                        <th>Outward Transfers</th>
+                        <th>Outside DR</th>
+                        <th>Closing Balance</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.partnerBalances.map(p => (
+                        <tr key={p.referral}>
+                          <td style={{ fontWeight: '800', color: '#0b1f3a', fontSize: '15px' }}>👤 {p.referral}</td>
+                          <td style={{ fontWeight: '700', color: '#64748b' }}>Rs. {(p.openingBalance || 0).toLocaleString('en-IN')}</td>
+                          <td style={{ color: '#15803d', fontWeight: '800' }}>Rs. {(p.collectionsCR || 0).toLocaleString('en-IN')}</td>
+                          <td style={{ color: '#0284c7', fontWeight: '700' }}>Rs. {(p.transfersIn || 0).toLocaleString('en-IN')}</td>
+                          <td>
+                            {p.outsideCR > 0 ? (
+                              <span className="badge-cr">⚡ Rs. {p.outsideCR.toLocaleString('en-IN')}</span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>-</span>
+                            )}
+                          </td>
+                          <td style={{ color: '#b91c1c', fontWeight: '800' }}>Rs. {(p.disbursalsDR || 0).toLocaleString('en-IN')}</td>
+                          <td style={{ color: '#d97706', fontWeight: '700' }}>Rs. {(p.transfersOut || 0).toLocaleString('en-IN')}</td>
+                          <td>
+                            {p.outsideDR > 0 ? (
+                              <span className="badge-dr">⚡ Rs. {p.outsideDR.toLocaleString('en-IN')}</span>
+                            ) : (
+                              <span style={{ color: '#94a3b8' }}>-</span>
+                            )}
+                          </td>
+                          <td style={{ fontWeight: '900', color: p.closingBalance === 0 ? '#15803d' : (p.closingBalance > 0 ? '#0284c7' : '#b91c1c'), fontSize: '15px' }}>
+                            Rs. {p.closingBalance.toLocaleString('en-IN')}
+                          </td>
+                          <td>
+                            <span style={{
+                              background: p.closingBalance === 0 ? '#f0fdf4' : (p.closingBalance > 0 ? '#e0f2fe' : '#fef2f2'),
+                              color: p.closingBalance === 0 ? '#15803d' : (p.closingBalance > 0 ? '#0369a1' : '#b91c1c'),
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontWeight: '800',
+                              fontSize: '11px'
+                            }}>
+                              {p.closingBalance === 0 ? '✓ Balanced' : (p.closingBalance > 0 ? '💰 Surplus' : '📉 Deficit')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Total Summary Row */}
+                      <tr style={{ background: '#f8fafc', borderTop: '2.5px solid #cbd5e1', fontWeight: '900' }}>
+                        <td style={{ color: '#0b1f3a', fontSize: '15px' }}>MASTER SYSTEM TOTAL</td>
+                        <td>-</td>
+                        <td style={{ color: '#15803d' }}>Rs. {(summary.collectionsCR || 0).toLocaleString('en-IN')}</td>
+                        <td>-</td>
+                        <td style={{ color: '#7c3aed' }}>Rs. {(summary.outsideCR || 0).toLocaleString('en-IN')}</td>
+                        <td style={{ color: '#b91c1c' }}>Rs. {(summary.disbursalsDR || 0).toLocaleString('en-IN')}</td>
+                        <td>-</td>
+                        <td style={{ color: '#d97706' }}>Rs. {(summary.outsideDR || 0).toLocaleString('en-IN')}</td>
+                        <td style={{ color: '#0b1f3a', fontSize: '16px' }}>Rs. {summary.masterNetDifference.toLocaleString('en-IN')}</td>
+                        <td>
+                          <span style={{
+                            background: summary.isMasterTallied ? '#dcfce7' : '#fee2e2',
+                            color: summary.isMasterTallied ? '#15803d' : '#b91c1c',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontWeight: '900',
+                            fontSize: '12px'
+                          }}>
+                            {summary.isMasterTallied ? '✨ 100% TALLIED' : '⚠️ UNTALLIED'}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ⚡ Outside Transactions Spotlight Box */}
+              {summary.outsideTransactions && summary.outsideTransactions.length > 0 && (
+                <div className="outside-alert-card">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                    <h3 style={{ color: '#6b21a8', fontWeight: '900', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>⚡</span>
+                      <span>Outside Party Transactions Spotlight ({summary.outsideTransactions.length} External Records)</span>
+                    </h3>
+                    <div style={{ display: 'flex', gap: '10px', fontSize: '13px', fontWeight: '800' }}>
+                      <span className="badge-cr">Outside Inward: Rs. {summary.outsideCR.toLocaleString('en-IN')}</span>
+                      <span className="badge-dr">Outside Outward: Rs. {summary.outsideDR.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="ledger-table" style={{ background: '#ffffff', borderRadius: '10px' }}>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Partner Involved</th>
+                          <th>Transaction Direction</th>
+                          <th>Outside Person / Party</th>
+                          <th>Amount</th>
+                          <th>Notes</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summary.outsideTransactions.map(t => {
+                          const isInward = t.fromReferral === 'Others';
+                          const partner = isInward ? t.toReferral : t.fromReferral;
+                          return (
+                            <tr key={t.id}>
+                              <td style={{ fontSize: '12px', fontWeight: '700' }}>{t.date}</td>
+                              <td style={{ fontWeight: '800', color: '#0b1f3a' }}>👤 {partner}</td>
+                              <td>
+                                <span className={isInward ? 'badge-cr' : 'badge-dr'}>
+                                  {isInward ? '📥 Credit (Inward Received)' : '📤 Debit (Outward Sent)'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="badge-outside">
+                                  <span>⚡</span>
+                                  <span>{t.outsidePersonName || 'Outside Party'}</span>
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: '900', fontSize: '14px', color: isInward ? '#15803d' : '#b91c1c' }}>
+                                {isInward ? '+' : '-'} Rs. {t.amount.toLocaleString('en-IN')}
+                              </td>
+                              <td style={{ fontSize: '12px', color: '#64748b' }}>{t.notes || '-'}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="danger"
+                                  style={{ padding: '4px 10px', fontSize: '11px' }}
+                                  onClick={() => handleDeleteTransfer(t.id)}
+                                >
+                                  🗑️ Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Complete Cashbook Ledger for the Month */}
+              <div className="admin-card">
+                <h3 className="admin-title">📋 Full Month Cashbook & Fund Transfers Ledger ({currentMonthName})</h3>
+                {summary.transfers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                    No cash transfers or external entries recorded for {currentMonthName}.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>From</th>
+                          <th>To</th>
+                          <th>Type</th>
+                          <th>Amount</th>
+                          <th>Notes</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {summary.transfers.map(t => (
+                          <tr key={t.id}>
+                            <td style={{ fontSize: '12px', fontWeight: '700' }}>{t.date}</td>
+                            <td>
+                              {t.fromReferral === 'Others' ? (
+                                <span className="badge-outside">⚡ {t.outsidePersonName || 'Outside'}</span>
+                              ) : (
+                                <strong style={{ color: '#d97706' }}>👤 {t.fromReferral}</strong>
+                              )}
+                            </td>
+                            <td>
+                              {t.toReferral === 'Others' ? (
+                                <span className="badge-outside">⚡ {t.outsidePersonName || 'Outside'}</span>
+                              ) : (
+                                <strong style={{ color: '#0284c7' }}>👤 {t.toReferral}</strong>
+                              )}
+                            </td>
+                            <td>
+                              <span className={t.fromReferral === 'Others' ? 'badge-cr' : 'badge-dr'}>
+                                {t.fromReferral === 'Others' ? 'CR (Credit)' : 'DR (Debit)'}
+                              </span>
+                            </td>
+                            <td style={{ color: t.fromReferral === 'Others' ? '#15803d' : '#b91c1c', fontWeight: '900' }}>
+                              Rs. {t.amount.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ fontSize: '12px', color: '#64748b' }}>{t.notes || '-'}</td>
+                            <td>
+                              <button
+                                type="button"
+                                className="danger"
+                                style={{ padding: '4px 10px', fontSize: '11px' }}
+                                onClick={() => handleDeleteTransfer(t.id)}
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // INDIVIDUAL PARTNER BALANCE SHEET
+    // ==========================================
+    function PartnerIndividualBalanceSheetView({ user, config, version, coreReferrals }) {
+      const partnerName = user.referral || 'PLSSV';
+      const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
+      const [summary, setSummary] = useState(null);
+      const [breakdown, setBreakdown] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      // Form state for dual Credit / Debit entries
+      const [entryType, setEntryType] = useState('DR'); // 'CR' (Receive) or 'DR' (Send)
+      const otherPartners = coreReferrals.filter(r => r !== partnerName);
+      const [selectedParty, setSelectedParty] = useState(otherPartners[0] || 'Others');
+      const [outsidePersonName, setOutsidePersonName] = useState('');
+      const [transferAmount, setTransferAmount] = useState('');
+      const [transferNotes, setTransferNotes] = useState('');
+      const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+      const [transferMsg, setTransferMsg] = useState('');
+
+      const fetchSummary = () => {
+        setIsLoading(true);
+        Promise.all([
+          fetch(`/api/accounts/summary?version=${version}&monthIndex=${selectedMonthIndex}`).then(r => r.json()),
+          fetch(`/api/accounts/partner-breakdown?partner=${partnerName}&version=${version}`).then(r => r.json())
+        ])
+          .then(([summaryData, breakdownData]) => {
+            if (summaryData.success) setSummary(summaryData.summary);
+            if (breakdownData.success) setBreakdown(breakdownData.breakdown);
+          })
+          .catch(e => console.error(e))
+          .finally(() => setIsLoading(false));
+      };
+
+      useEffect(() => {
+        fetchSummary();
+      }, [version, selectedMonthIndex]);
+
+      const handleAddEntry = async (e) => {
+        e.preventDefault();
+        if (!transferAmount || parseFloat(transferAmount) <= 0) return alert("Enter valid amount");
+
+        const isCR = entryType === 'CR';
+        if (isCR && !outsidePersonName.trim()) {
+          return alert("Please enter the Outside Person / Financier Name");
+        }
+        if (!isCR && selectedParty === 'Others' && !outsidePersonName.trim()) {
+          return alert("Please enter the Outside Person / Vendor Name");
+        }
+
+        const fromReferral = isCR ? 'Others' : partnerName;
+        const toReferral = isCR ? partnerName : selectedParty;
+        const targetOtherName = isCR ? outsidePersonName.trim() : (selectedParty === 'Others' ? outsidePersonName.trim() : null);
+
+        try {
+          const res = await fetch('/api/accounts/transfers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              version,
+              monthIndex: selectedMonthIndex,
+              entryType,
+              fromReferral,
+              toReferral,
+              otherPartyName: targetOtherName,
+              otherRecipientName: (!isCR && selectedParty === 'Others') ? targetOtherName : null,
+              otherSenderName: isCR ? targetOtherName : null,
+              amount: parseFloat(transferAmount),
+              date: transferDate,
+              notes: transferNotes || (isCR ? `Outside inward credit from ${targetOtherName}` : `Outward payout to ${selectedParty === 'Others' ? targetOtherName : selectedParty}`)
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setTransferMsg(`${isCR ? 'Credit (Inward)' : 'Debit (Outward)'} recorded successfully!`);
+            setTransferAmount('');
+            setTransferNotes('');
+            setOutsidePersonName('');
+            fetchSummary();
+            setTimeout(() => setTransferMsg(''), 3500);
+          }
+        } catch (e) {
+          alert("Error saving transaction");
+        }
+      };
+
+      const handleDeleteTransfer = async (id) => {
+        if (!confirm("Are you sure you want to delete this cash entry?")) return;
+        await fetch('/api/accounts/transfers', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transferId: id })
+        });
+        fetchSummary();
+      };
+
+      const myBalance = summary ? (summary.partnerBalances.find(p => p.referral === partnerName) || {}) : {};
+      const currentMonthObj = config.months && config.months[selectedMonthIndex];
+      const monthLabel = currentMonthObj ? (currentMonthObj.name || `Month ${selectedMonthIndex + 1}`) : `Month ${selectedMonthIndex + 1}`;
+
+      return (
+        <div className="fade-in">
+          {/* Top Title & Month Controls */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+            <div>
+              <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#059669', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📒</span>
+                <span>My Balance Sheet — {partnerName} ({version.replace('_', ' ')})</span>
+              </h2>
+              <p style={{ fontSize: '13px', color: '#64748b' }}>
+                Track your collections, outside cash credits/debits, internal partner transfers, and carry-forward balance.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ffffff', padding: '6px 14px', borderRadius: '10px', border: '1.5px solid #059669' }}>
+                <label style={{ fontWeight: '800', color: '#0b1f3a', fontSize: '13px' }}>Month:</label>
+                <select
+                  value={selectedMonthIndex}
+                  onChange={e => setSelectedMonthIndex(parseInt(e.target.value))}
+                  style={{ padding: '4px 8px', fontWeight: '800', border: 'none', background: 'transparent', color: '#059669', outline: 'none' }}
+                >
+                  {config.months && config.months.map((mObj, idx) => (
+                    <option key={idx} value={idx}>
+                      Month {idx + 1}: {mObj.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                className="success"
+                onClick={() => exportAccountsToExcel(version, selectedMonthIndex, config, partnerName)}
+                style={{ padding: '9px 18px', fontSize: '13px' }}
+              >
+                📥 Export My Balance Sheet (Excel)
+              </button>
+            </div>
+          </div>
+
+          {isLoading || !summary ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>Calculating Balance...</div>
+          ) : (
+            <div>
+              {/* Carry Forward Explanation Banner */}
+              <div className="carry-forward-banner">
+                <div>
+                  <strong style={{ color: '#15803d' }}>🔄 Multi-Month Carry Forward Active:</strong>
+                  <span style={{ fontSize: '13px', color: '#334155', marginLeft: '6px' }}>
+                    Month {selectedMonthIndex + 1} Opening Balance is carried forward from previous month's closing balance.
+                  </span>
+                </div>
+                <div style={{ fontWeight: '900', color: '#15803d', fontSize: '16px' }}>
+                  Opening: Rs. {(myBalance.openingBalance || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              {/* Partner Scoped Balance Statement Card */}
+              <div style={{ maxWidth: '680px', margin: '0 auto 26px auto' }}>
+                <div className="partner-card" style={{ border: '2.5px solid #059669', padding: '26px' }}>
+                  <div className="partner-card-header">
+                    <h3 style={{ fontSize: '22px' }}>👤 {partnerName}'s Financial Statement ({monthLabel})</h3>
+                    <span className="version-pill active" style={{ padding: '4px 12px', fontSize: '12px' }}>
+                      {version.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div className="partner-metric-row" style={{ color: '#64748b', fontSize: '14px' }}>
+                    <span>🔄 Opening Balance (Carried Forward):</span>
+                    <strong>Rs. {(myBalance.openingBalance || 0).toLocaleString('en-IN')}</strong>
+                  </div>
+
+                  <div className="partner-metric-row cr" style={{ fontSize: '15px', marginTop: '8px' }}>
+                    <span>+ Chit Member Collections (CR):</span>
+                    <strong>Rs. {(myBalance.collectionsCR || 0).toLocaleString('en-IN')}</strong>
+                  </div>
+
+                  <div className="partner-metric-row" style={{ color: '#7c3aed', fontSize: '14px' }}>
+                    <span>+ Outside Inward Credits (CR):</span>
+                    <strong>
+                      {myBalance.outsideCR > 0 ? (
+                        <span className="badge-outside" style={{ padding: '2px 8px' }}>
+                          ⚡ Rs. {myBalance.outsideCR.toLocaleString('en-IN')}
+                        </span>
+                      ) : (
+                        'Rs. 0'
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="partner-metric-row" style={{ color: '#0369a1', fontSize: '14px' }}>
+                    <span>+ Transfers Received from Partners (IN):</span>
+                    <strong>Rs. {(myBalance.transfersIn - (myBalance.outsideCR || 0)).toLocaleString('en-IN')}</strong>
+                  </div>
+
+                  <div className="partner-metric-row dr" style={{ fontSize: '15px', marginTop: '8px' }}>
+                    <span>- Auction Payouts Disbursed to Winners (DR):</span>
+                    <strong>Rs. {(myBalance.disbursalsDR || 0).toLocaleString('en-IN')}</strong>
+                  </div>
+
+                  <div className="partner-metric-row" style={{ color: '#b91c1c', fontSize: '14px' }}>
+                    <span>- Outside Outward Debits (DR):</span>
+                    <strong>
+                      {myBalance.outsideDR > 0 ? (
+                        <span className="badge-outside-amber" style={{ padding: '2px 8px' }}>
+                          ⚡ Rs. {myBalance.outsideDR.toLocaleString('en-IN')}
+                        </span>
+                      ) : (
+                        'Rs. 0'
+                      )}
+                    </strong>
+                  </div>
+
+                  <div className="partner-metric-row" style={{ color: '#d97706', fontSize: '14px' }}>
+                    <span>- Transfers Sent to Partners (OUT):</span>
+                    <strong>Rs. {(myBalance.transfersOut - (myBalance.outsideDR || 0)).toLocaleString('en-IN')}</strong>
+                  </div>
+
+                  <div className="partner-closing-box">
+                    <div>
+                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#0b1f3a' }}>Closing Balance ({monthLabel}):</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        {myBalance.closingBalance === 0 
+                          ? '✅ Perfectly Settled (Rs. 0)' 
+                          : myBalance.closingBalance > 0 
+                          ? '💰 Cash in Hand (Carried to next month)' 
+                          : '📉 Advance Paid (To be received in next month)'}
+                      </div>
+                    </div>
+                    <div className={`balance-val ${myBalance.closingBalance === 0 ? 'balance-zero' : myBalance.closingBalance > 0 ? 'balance-surplus' : 'balance-deficit'}`}>
+                      {myBalance.closingBalance >= 0 ? `Rs. ${myBalance.closingBalance.toLocaleString('en-IN')}` : `- Rs. ${Math.abs(myBalance.closingBalance).toLocaleString('en-IN')}`}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fund Management: Dual Credit (CR) & Debit (DR) Form */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '22px', marginBottom: '30px' }}>
+                <div className="admin-card">
+                  <h3 className="admin-title">💸 Record Cash Entry (Credit / Debit)</h3>
+                  <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+                    Record incoming funds from partners/outside (Credit) or outgoing payments/contributions (Debit).
+                  </p>
+
+                  {/* CR / DR Toggle Switch */}
+                  <div className="entry-type-switch" style={{ marginBottom: '16px' }}>
+                    <button
+                      type="button"
+                      className={`entry-type-btn ${entryType === 'CR' ? 'active-cr' : ''}`}
+                      onClick={() => {
+                        setEntryType('CR');
+                        setSelectedParty('Others');
+                      }}
+                    >
+                      <span>🟢</span>
+                      <span>Receive Credit (CR - Inward)</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`entry-type-btn ${entryType === 'DR' ? 'active-dr' : ''}`}
+                      onClick={() => {
+                        setEntryType('DR');
+                        if (selectedParty === 'Others' && otherPartners.length > 0) {
+                          setSelectedParty(otherPartners[0]);
+                        }
+                      }}
+                    >
+                      <span>🔴</span>
+                      <span>Send Debit (DR - Outward)</span>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleAddEntry} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {entryType === 'CR' ? (
+                      /* RECEIVE CREDIT FORM: ONLY FROM OTHERS (OUTSIDE FINANCIER / LOAN / CREDITOR) */
+                      <div>
+                        <div className="form-grid" style={{ marginBottom: '14px' }}>
+                          <div className="form-group">
+                            <label>Received From Source: *</label>
+                            <select value="Others" disabled style={{ background: '#f8fafc', fontWeight: '800', color: '#7c3aed', cursor: 'not-allowed' }}>
+                              <option value="Others">⚡ Others (Outside Creditor / Financier)</option>
+                            </select>
+                          </div>
+
+                          <div className="form-group">
+                            <label>Received By Partner:</label>
+                            <input
+                              type="text"
+                              value={`${partnerName} (You)`}
+                              disabled
+                              style={{ background: '#f1f5f9', fontWeight: '800', color: '#0b1f3a' }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Dedicated Outside Financier / Creditor Name Box */}
+                        <div className="form-group" style={{ background: '#faf5ff', padding: '14px', borderRadius: '10px', border: '2px solid #c084fc', marginBottom: '14px' }}>
+                          <label style={{ color: '#7e22ce', fontWeight: '900', fontSize: '13px' }}>
+                            ⚡ Enter Outside Person / Financier Name: *
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Karthik Financier / External Loan / Bank Deposit"
+                            value={outsidePersonName}
+                            onChange={e => setOutsidePersonName(e.target.value)}
+                            required
+                            style={{ borderColor: '#a855f7', fontWeight: '700' }}
+                          />
+                          <div style={{ fontSize: '11px', color: '#6b21a8', marginTop: '6px', lineHeight: '1.4' }}>
+                            💡 <strong>Auto-Reconciliation:</strong> Partner-to-Partner transfers are automatically credited when the sender partner records Debit (DR). Here, record only external outside credits to prevent duplicate entries.
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* SEND DEBIT FORM: TO PARTNERS OR OTHERS */
+                      <div>
+                        <div className="form-grid" style={{ marginBottom: '14px' }}>
+                          <div className="form-group">
+                            <label>Sent From Partner:</label>
+                            <input
+                              type="text"
+                              value={`${partnerName} (You)`}
+                              disabled
+                              style={{ background: '#f1f5f9', fontWeight: '800', color: '#0b1f3a' }}
+                            />
+                          </div>
+
+                          <div className="form-group">
+                            <label>Send To Party / Recipient: *</label>
+                            <select value={selectedParty} onChange={e => setSelectedParty(e.target.value)}>
+                              {otherPartners.map(r => <option key={r} value={r}>👤 Partner: {r}</option>)}
+                              <option value="Others">⚡ Others (Outside Recipient / Vendor)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Outside Party input if 'Others' selected for Debit */}
+                        {selectedParty === 'Others' ? (
+                          <div className="form-group" style={{ background: '#fff7ed', padding: '14px', borderRadius: '10px', border: '2px solid #fdba74', marginBottom: '14px' }}>
+                            <label style={{ color: '#c2410c', fontWeight: '900', fontSize: '13px' }}>
+                              ⚡ Enter Outside Person / Vendor Name: *
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Suresh Vendor / Bank Pool Deposit"
+                              value={outsidePersonName}
+                              onChange={e => setOutsidePersonName(e.target.value)}
+                              required
+                              style={{ borderColor: '#f97316', fontWeight: '700' }}
+                            />
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: '#0369a1', background: '#e0f2fe', padding: '8px 12px', borderRadius: '8px', marginBottom: '14px' }}>
+                            ℹ️ Sending to <strong>{selectedParty}</strong> will deduct from your balance and automatically reflect in <strong>{selectedParty}</strong>'s balance sheet under Inward Transfers.
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="form-grid">
+                      <div className="form-group">
+                        <label>Amount (Rs.): *</label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 5000"
+                          value={transferAmount}
+                          onChange={e => setTransferAmount(e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Transaction Date: *</label>
+                        <input
+                          type="date"
+                          value={transferDate}
+                          onChange={e => setTransferDate(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Notes / Purpose:</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Month auction pool or external adjustment"
+                        value={transferNotes}
+                        onChange={e => setTransferNotes(e.target.value)}
+                      />
+                    </div>
+
+                    {transferMsg && (
+                      <div style={{ color: '#15803d', background: '#dcfce7', padding: '10px', borderRadius: '8px', fontWeight: 'bold' }}>
+                        ✅ {transferMsg}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      style={{
+                        marginTop: '8px',
+                        background: entryType === 'CR' ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)'
+                      }}
+                    >
+                      {entryType === 'CR' ? '📥 Save Inward Credit (CR)' : '📤 Save Outward Debit (DR)'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Transfer History Log with Outside Highlight */}
+                <div className="admin-card">
+                  <h3 className="admin-title">📋 {partnerName}'s Cash Transactions ({monthLabel})</h3>
+                  {summary.transfers && summary.transfers.filter(t => t.fromReferral === partnerName || t.toReferral === partnerName).length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8' }}>
+                      No transfers recorded for {partnerName} in {monthLabel}.
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table className="ledger-table">
+                        <thead>
+                          <tr>
+                            <th>Type</th>
+                            <th>Party Details</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {summary.transfers.filter(t => t.fromReferral === partnerName || t.toReferral === partnerName).map(t => {
+                            const isIncoming = t.toReferral === partnerName;
+                            const otherSide = isIncoming ? t.fromReferral : t.toReferral;
+                            return (
+                              <tr key={t.id}>
+                                <td>
+                                  <span className={isIncoming ? 'badge-cr' : 'badge-dr'}>
+                                    {isIncoming ? 'CR (Inward)' : 'DR (Outward)'}
+                                  </span>
+                                </td>
+                                <td>
+                                  {t.isOutside ? (
+                                    <div>
+                                      <span className="badge-outside">
+                                        ⚡ Outside: {t.outsidePersonName || 'External'}
+                                      </span>
+                                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                        {isIncoming ? 'Received into your balance' : 'Paid out from your balance'}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div>
+                                      <strong>👤 Partner: {otherSide}</strong>
+                                      <div style={{ fontSize: '11px', color: '#64748b' }}>
+                                        {isIncoming ? `Received from ${t.fromReferral}` : `Sent to ${t.toReferral}`}
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ fontWeight: '900', color: isIncoming ? '#15803d' : '#b91c1c' }}>
+                                  {isIncoming ? '+' : '-'} Rs. {t.amount.toLocaleString('en-IN')}
+                                </td>
+                                <td style={{ fontSize: '12px' }}>{t.date}</td>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="danger"
+                                    style={{ padding: '3px 8px', fontSize: '11px' }}
+                                    onClick={() => handleDeleteTransfer(t.id)}
+                                  >
+                                    🗑️
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* PER PERSON COMPLETE MONTH-WISE & VERSION-WISE CR/DR SUMMARY BOX */}
+              {breakdown && (
+                <div className="breakdown-table-box">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#0b1f3a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📊</span>
+                        <span>{partnerName}'s Full Month-wise & Version-wise Ledger Summary</span>
+                      </h3>
+                      <p style={{ fontSize: '13px', color: '#64748b' }}>
+                        Month-by-month progression of collections, outside funds, disbursals, and cumulative closing balances.
+                      </p>
+                    </div>
+
+                    {/* Version Totals Pills */}
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {(breakdown.versionBreakdown || []).map(vb => (
+                        <div key={vb.version} style={{ background: '#f8fafc', padding: '6px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '12px', fontWeight: '800' }}>
+                          <span style={{ color: '#0b1f3a' }}>✨ {vb.version}: </span>
+                          <span style={{ color: vb.closingBalance >= 0 ? '#15803d' : '#b91c1c' }}>
+                            Rs. {vb.closingBalance.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>Month</th>
+                          <th>Chit Collections (CR)</th>
+                          <th>Outside Inward (CR)</th>
+                          <th>Total Inflow (CR)</th>
+                          <th>Auction Disbursals (DR)</th>
+                          <th>Outside Outward (DR)</th>
+                          <th>Total Outflow (DR)</th>
+                          <th>Net Month</th>
+                          <th>Closing Balance</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(breakdown.monthlyBreakdown || []).map(m => (
+                          <tr key={m.monthIndex} style={{ background: m.monthIndex === selectedMonthIndex ? '#f0fdf4' : 'transparent' }}>
+                            <td style={{ fontWeight: '800', color: '#0b1f3a' }}>
+                              M{m.monthIndex + 1}: {m.tamilName || m.monthName}
+                              {m.monthIndex === selectedMonthIndex && (
+                                <span style={{ marginLeft: '6px', fontSize: '10px', background: '#15803d', color: '#ffffff', padding: '2px 6px', borderRadius: '10px' }}>Active</span>
+                              )}
+                            </td>
+                            <td style={{ color: '#15803d', fontWeight: '700' }}>Rs. {m.collectionsCR.toLocaleString('en-IN')}</td>
+                            <td>
+                              {m.outsideCR > 0 ? (
+                                <span className="badge-cr">⚡ Rs. {m.outsideCR.toLocaleString('en-IN')}</span>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>-</span>
+                              )}
+                            </td>
+                            <td style={{ fontWeight: '800', color: '#15803d' }}>Rs. {m.totalInflow.toLocaleString('en-IN')}</td>
+                            <td style={{ color: '#b91c1c', fontWeight: '700' }}>Rs. {m.disbursalsDR.toLocaleString('en-IN')}</td>
+                            <td>
+                              {m.outsideDR > 0 ? (
+                                <span className="badge-dr">⚡ Rs. {m.outsideDR.toLocaleString('en-IN')}</span>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>-</span>
+                              )}
+                            </td>
+                            <td style={{ fontWeight: '800', color: '#b91c1c' }}>Rs. {m.totalOutflow.toLocaleString('en-IN')}</td>
+                            <td style={{ fontWeight: '800', color: m.netCurrent >= 0 ? '#0284c7' : '#dc2626' }}>
+                              {m.netCurrent >= 0 ? '+' : ''} Rs. {m.netCurrent.toLocaleString('en-IN')}
+                            </td>
+                            <td style={{ fontWeight: '900', color: m.closingBalance === 0 ? '#15803d' : (m.closingBalance > 0 ? '#0284c7' : '#b91c1c') }}>
+                              Rs. {m.closingBalance.toLocaleString('en-IN')}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================================================
+    // ULTRA-ELEGANT & LUXURIOUS ROYAL PASSBOOK VIEW
+    // ==========================================================================
+    function CustomerPassbookView({ user, config, version, customers, coreReferrals }) {
+      const isPartnerAdmin = user.role === 'admin' && user.username !== 'admin';
+      const [selectedReferral, setSelectedReferral] = useState(
+        isPartnerAdmin ? user.referral : (user.role === 'customer' ? user.referral : coreReferrals[0])
+      );
+      const [selectedCustomer, setSelectedCustomer] = useState(null);
+      const [isDownloading, setIsDownloading] = useState(false);
+      const printRef = useRef();
+
+      const displayCustomers = user.role === 'customer'
+        ? customers.filter(c => c.id === user.customerId || c.mobile === user.mobile)
+        : (isPartnerAdmin 
+            ? customers.filter(c => c.referral === user.referral)
+            : (selectedReferral === 'All' ? customers : customers.filter(c => c.referral === selectedReferral)));
+
+      const maskMobile = (num) => {
+        if (!num) return '-';
+        const str = String(num).trim();
+        if (str.length <= 4) return str;
+        return str.slice(0, 2) + 'X'.repeat(str.length - 4) + str.slice(-2);
+      };
+
+      useEffect(() => {
+        if (displayCustomers.length > 0) {
+          if (!selectedCustomer || !displayCustomers.find(c => c.id === selectedCustomer.id)) {
+            setSelectedCustomer(displayCustomers[0]);
+          }
+        } else {
+          setSelectedCustomer(null);
+        }
+      }, [selectedReferral, customers, version]);
+
+      const handleDownload = async (format = 'jpg') => {
+        const element = printRef.current;
+        if (!element || isDownloading) return;
+        setIsDownloading(true);
+
+        try {
+          // Ensure web fonts are completely loaded
+          if (document.fonts) {
+            await document.fonts.ready;
+          }
+
+          // Render high-definition canvas using isolated clone (never mutates the live on-screen element)
+          const canvas = await html2canvas(element, {
+            scale: 3, // Ultra-sharp 300 DPI print quality
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: "#ffffff",
+            windowWidth: 1024, // Consistent desktop-proportioned layout
+            onclone: (clonedDoc) => {
+              const card = clonedDoc.querySelector('.chit-portrait-card');
+              if (card) {
+                card.style.width = "760px";
+                card.style.maxWidth = "760px";
+                card.style.margin = "0 auto";
+                card.style.boxShadow = "none";
+              }
+            }
+          });
+
+          const isJpeg = format === 'jpg';
+          const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+          const quality = isJpeg ? 0.98 : undefined;
+          const image = canvas.toDataURL(mimeType, quality);
+
+          const link = document.createElement("a");
+          link.href = image;
+          const safeCustName = selectedCustomer ? selectedCustomer.name.replace(/[^a-zA-Z0-9_-]/g, '_') : 'Chit';
+          link.download = `${safeCustName}_${version}_Passbook.${format}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          console.error("Passbook generation error:", e);
+          alert("Error generating passbook image. Please try again.");
+        } finally {
+          setIsDownloading(false);
+        }
+      };
+
+      const handlePrint = () => {
+        window.print();
+      };
+
+      const schemeType = selectedCustomer ? selectedCustomer.schemeType : (Object.keys(config.schemes || {})[0] || '1250');
+      const schemeDetails = (config.schemes && config.schemes[schemeType]) || (config.schemes && Object.values(config.schemes)[0]) || {};
+
+      const refName = selectedCustomer ? selectedCustomer.referral : selectedReferral;
+      let signatureSrc = "";
+      if (refName === "PLSSV") signatureSrc = "assests/signature/PLSSV_Signature.png";
+      else if (refName === "Arun") signatureSrc = "assests/signature/Arun_Signature.png";
+      else if (refName === "Ramana") signatureSrc = "assests/signature/Ramana_Signature.png";
+      const passbookBg = version === 'JV_1.0'
+        ? 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 50%, #ecfdf5 100%)'
+        : version === 'JV_2.0'
+        ? 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 50%, #e0f2fe 100%)'
+        : 'linear-gradient(135deg, #fffbe6 0%, #fef3c7 50%, #faf5ff 100%)';
+
+      const passbookBorder = version === 'JV_1.0'
+        ? '2px solid #86efac'
+        : version === 'JV_2.0'
+        ? '2px solid #93c5fd'
+        : '2px solid #fde68a';
+
+      return (
+        <div>
+          {/* Admin Referral Filters and Excel Export */}
+          {user.role === 'admin' && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: '#ffffff', padding: '12px 18px', borderRadius: '12px', marginBottom: '16px', border: '1.5px solid #e2e8f0' }}>
+              <div className="tabs">
+                <strong style={{ margin: 'auto 10px auto 0', color: '#0b1f3a' }}>Referral Partner:</strong>
+                {isPartnerAdmin ? (
+                  <span style={{ fontWeight: '900', color: '#0b1f3a', padding: '7px 14px', background: '#e0f2fe', borderRadius: '8px' }}>
+                    👤 {user.referral}
+                  </span>
+                ) : (
+                  <>
+                    {coreReferrals.map(r => (
+                      <button
+                        key={r}
+                        className={`tabbtn ${selectedReferral === r ? 'active' : ''}`}
+                        onClick={() => setSelectedReferral(r)}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                    <button
+                      className={`tabbtn ${selectedReferral === 'All' ? 'active' : ''}`}
+                      onClick={() => setSelectedReferral('All')}
+                    >
+                      All Partners
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                className="success"
+                onClick={() => exportCustomersToExcel(customers, config, version, isPartnerAdmin ? user.referral : selectedReferral)}
+                style={{ padding: '9px 18px', fontSize: '13px' }}
+              >
+                📊 Export Customers (Excel)
+              </button>
+            </div>
+          )}
+
+          {user.role === 'admin' && displayCustomers.length > 0 && (
+            <div className="tabs" style={{ marginBottom: '22px', gap: '8px' }}>
+              {displayCustomers.map(c => (
+                <button
+                  key={c.id}
+                  className={`tabbtn ${selectedCustomer && selectedCustomer.id === c.id ? 'active' : ''}`}
+                  style={{
+                    backgroundColor: selectedCustomer && selectedCustomer.id === c.id ? '#0b1f3a' : '#ffffff',
+                    color: selectedCustomer && selectedCustomer.id === c.id ? '#ffffff' : '#0b1f3a',
+                    border: '1.5px solid #cbd5e1'
+                  }}
+                  onClick={() => setSelectedCustomer(c)}
+                >
+                  👤 {c.name} (Rs. {Number(c.schemeType).toLocaleString('en-IN')})
+                </button>
+              ))}
+            </div>
+          )}
+
+          {!selectedCustomer ? (
+            <div style={{ textAlign: 'center', padding: '50px 20px', color: '#64748b' }}>
+              <h3>No customers found</h3>
+              <p style={{ marginTop: '8px', fontSize: '14px' }}>Please add a customer under this version to view their passbook card.</p>
+            </div>
+          ) : (
+            <div className="chit-portrait-wrapper">
+              <div ref={printRef} className="chit-portrait-card" style={{ background: passbookBg, border: passbookBorder }}>
+                {/* High-Res Watermark Logo */}
+                <img src="assests/logo.png" className="passbook-big-watermark" alt="Watermark" crossOrigin="anonymous" />
+
+                <div className="passbook-content-layer">
+                  {/* Top Sacred Blessing */}
+                  <div className="passbook-god-header">
+                    ✨ {config.headerGreeting || 'ஸ்ரீ வரதராஜப் பரப்ரஹ்மணே நம:'} ✨
+                  </div>
+
+                  {/* Portrait Brand Header */}
+                  <div className="passbook-portrait-header">
+                    <img src="assests/logo.png" alt="JV Logo" className="passbook-crest-logo" crossOrigin="anonymous" />
+
+                    <div className="passbook-brand-center">
+                      <h1 className="passbook-brand-title">{config.title || 'JV CHIT FUND'}</h1>
+                      <div className="passbook-brand-slogan">
+                        <span>🪙</span>
+                        <span>{config.slogan || 'Save Monthly, Grow Yearly 📈'}</span>
+                      </div>
+                    </div>
+
+                    <div className="passbook-crest-badge">
+                      <img src="assests/logo.png" alt="JV Logo" className="passbook-crest-logo" crossOrigin="anonymous" style={{ width: '56px', height: '56px' }} />
+                      <div className="badge-version-gold" style={{ marginTop: '2px', fontSize: '11px', padding: '3px 10px' }}>{version.replace('_', ' ')}</div>
+                    </div>
+                  </div>
+
+                  {/* Customer Information Strip */}
+                  <div className="passbook-info-card">
+                    <div className="info-item">
+                      <span className="info-lbl">Customer Name:</span>
+                      <span className="info-val">{selectedCustomer.name}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-lbl">Mobile Number:</span>
+                      <span className="info-val">{maskMobile(selectedCustomer.mobile)}</span>
+                    </div>
+                    <div className="info-item">
+                      <span className="info-lbl">Referral Partner:</span>
+                      <span className="info-val">{selectedCustomer.referral}</span>
+                    </div>
+                    <div className="info-item" style={{ textAlign: 'right' }}>
+                      <span className="info-lbl">Chit Plan:</span>
+                      <span className="info-val" style={{ color: '#b45309' }}>
+                        Rs. {Number(selectedCustomer.schemeType).toLocaleString('en-IN')} Plan
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Portrait Passbook Table */}
+                  <div className="portrait-table-box">
+                    <table className="portrait-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '42px' }}>S.No</th>
+                          <th>Month</th>
+                          <th>Payable Amount</th>
+                          <th>Withdraw Amount</th>
+                          <th style={{ minWidth: '95px' }}>Paid Date</th>
+                          <th style={{ minWidth: '90px' }}>Signature</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {config.months && config.months.map((mObj, idx) => {
+                          const monthDisplayName = mObj.tamilName || mObj.name || `Month ${idx + 1}`;
+                          const payItem = selectedCustomer.payments && selectedCustomer.payments[idx];
+                          const isPaid = payItem && payItem.isPaid;
+                          const paidDate = payItem && payItem.paidDate;
+
+                          const monthlyPayable = (schemeDetails.monthlyPayable && schemeDetails.monthlyPayable[idx]) || schemeDetails.basePayable || selectedCustomer.schemeType;
+                          const receivedAmt = (schemeDetails.received && schemeDetails.received[idx]) || '-';
+
+                          return (
+                            <tr key={idx} className={isPaid ? 'paid-row' : ''}>
+                              <td style={{ fontWeight: '700' }}>{idx + 1}</td>
+                              <td style={{ fontWeight: '800', fontSize: '12px' }}>{monthDisplayName}</td>
+                              <td style={{ fontWeight: '700' }}>{monthlyPayable ? `Rs. ${Number(monthlyPayable).toLocaleString('en-IN')}` : '-'}</td>
+                              <td style={{ fontWeight: '700' }}>{receivedAmt && receivedAmt !== '-' ? `Rs. ${Number(receivedAmt).toLocaleString('en-IN')}` : '-'}</td>
+                              <td style={{ color: isPaid ? '#15803d' : '#94a3b8', fontWeight: isPaid ? '800' : 'normal', fontSize: '11px' }}>
+                                {isPaid ? paidDate : '-'}
+                              </td>
+                              <td style={{ padding: '2px' }}>
+                                <div className="signature-portrait-box">
+                                  {isPaid && signatureSrc ? (
+                                    <img src={signatureSrc} alt="Signature" crossOrigin="anonymous" />
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Portrait Passbook Footer */}
+                  <div className="passbook-portrait-footer">
+                    {/* Calendar Notice Box */}
+                    <div className="passbook-calendar-box">
+                      <span>📅</span>
+                      <span>{config.footerRule || 'Every month 1 to 5 payable amount.'}</span>
+                    </div>
+
+                    {/* Auction Payout Box */}
+                    {selectedCustomer.withdrawal && selectedCustomer.withdrawal.isWithdrawn ? (
+                      <div className="portrait-payout-box">
+                        🎉 Received installment auction payout of <strong>Rs. {selectedCustomer.withdrawal.amount ? Number(selectedCustomer.withdrawal.amount).toLocaleString('en-IN') : (schemeDetails.received ? Number(schemeDetails.received[0]).toLocaleString('en-IN') : '___')}</strong> on {selectedCustomer.withdrawal.withdrawDate || '___'}
+                        {selectedCustomer.withdrawal.disbursedBy ? ` (Disbursed by ${selectedCustomer.withdrawal.disbursedBy})` : ''}
+                      </div>
+                    ) : (
+                      <div className="portrait-payout-box" style={{ background: '#f8fafc', borderColor: '#cbd5e1', color: '#475569' }}>
+                        Received ___ installment auction amount Rs. _______ on Date _________
+                      </div>
+                    )}
+
+                    {/* Welcome / Version Divider */}
+                    <div className="passbook-version-divider">
+                      <span className="ornament">⚜️</span>
+                      <span>{config.welcomeText || `Welcome to ${version}`}</span>
+                      <span className="ornament">⚜️</span>
+                    </div>
+
+                    {/* Bottom Trust & Seal Line */}
+                    <div className="portrait-bottom-seal">
+                      <div>{config.subNote || 'JayanVijayan Chit Fund – Building Trust, Creating Wealth'}</div>
+                      <div>Since {config.since || '2025'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons: High-Res JPG only */}
+              <div className="passbook-actions-bar">
+                <button
+                  className="gold"
+                  disabled={isDownloading}
+                  onClick={() => handleDownload('jpg')}
+                >
+                  <span>📸</span>
+                  <span>{isDownloading ? '⏳ Generating Passbook...' : 'Download Passbook (JPG)'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // ADD CUSTOMER
+    // ==========================================
+    function AddCustomerView({ user, configs, selectedVersion, setSelectedVersion, coreReferrals, onCustomerAdded }) {
+      const isPartnerAdmin = user.role === 'admin' && user.username !== 'admin';
+      const [name, setName] = useState('');
+      const [mobile, setMobile] = useState('');
+      const [password, setPassword] = useState('1234');
+      const [referral, setReferral] = useState(isPartnerAdmin ? user.referral : (coreReferrals[0] || 'PLSSV'));
+      const [version, setVersion] = useState(selectedVersion);
+      const [schemeType, setSchemeType] = useState('1000');
+
+      const [isLoading, setIsLoading] = useState(false);
+      const [msg, setMsg] = useState('');
+      const [err, setErr] = useState('');
+
+      const currentConfig = configs[version] || configs['JV_3.0'] || {};
+      const availableSchemes = currentConfig.schemes ? Object.keys(currentConfig.schemes) : ['1000', '2500', '5000'];
+
+      useEffect(() => {
+        if (!availableSchemes.includes(schemeType)) {
+          setSchemeType(availableSchemes[0] || '1000');
+        }
+      }, [version]);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMsg('');
+        setErr('');
+        setIsLoading(true);
+
+        try {
+          const res = await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name,
+              mobile,
+              password,
+              referral: isPartnerAdmin ? user.referral : referral,
+              version,
+              schemeType
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setMsg('Customer registered successfully!');
+            setName('');
+            setMobile('');
+            setPassword('1234');
+            setSelectedVersion(version);
+            setTimeout(() => {
+              onCustomerAdded();
+            }, 1200);
+          } else {
+            setErr(data.message || 'Failed to add customer');
+          }
+        } catch (e) {
+          setErr('Server error connecting to API');
+        }
+        setIsLoading(false);
+      };
+
+      return (
+        <div className="admin-card fade-in" style={{ maxWidth: '650px', margin: '0 auto' }}>
+          <h2 className="admin-title">➕ Register New Customer</h2>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Full Customer Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Ramesh Kumar"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Mobile Number *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 9840011223"
+                  value={mobile}
+                  onChange={e => setMobile(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-group">
+                <label>Chit Scheme Version *</label>
+                <select value={version} onChange={e => setVersion(e.target.value)}>
+                  {Object.keys(configs).map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Chit Plan (Base Amount) *</label>
+                <select value={schemeType} onChange={e => setSchemeType(e.target.value)}>
+                  {availableSchemes.map(s => (
+                    <option key={s} value={s}>Rs. {s} Plan</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Referral Partner *</label>
+              {isPartnerAdmin ? (
+                <input
+                  type="text"
+                  value={user.referral}
+                  disabled
+                  style={{ background: '#f1f5f9', fontWeight: '800', color: '#0b1f3a' }}
+                />
+              ) : (
+                <select value={referral} onChange={e => setReferral(e.target.value)}>
+                  {coreReferrals.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              )}
+            </div>
+
+            {msg && <div style={{ color: '#15803d', background: '#dcfce7', padding: '10px', borderRadius: '8px', fontWeight: 'bold' }}>✅ {msg}</div>}
+            {err && <div style={{ color: '#dc2626', background: '#fee2e2', padding: '10px', borderRadius: '8px', fontWeight: 'bold' }}>⚠️ {err}</div>}
+
+            <button type="submit" disabled={isLoading} style={{ marginTop: '10px', padding: '12px', fontSize: '16px' }}>
+              {isLoading ? 'Creating Account...' : 'Register Customer'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // ADMIN PAYMENT UPDATES
+    // ==========================================
+    function AdminPaymentUpdatesView({ user, config, version, customers, coreReferrals, refreshData }) {
+      const isPartnerAdmin = user.role === 'admin' && user.username !== 'admin';
+      const [filterReferral, setFilterReferral] = useState(isPartnerAdmin ? user.referral : (coreReferrals[0] || 'PLSSV'));
+      const filteredCustomers = customers.filter(c => (isPartnerAdmin ? c.referral === user.referral : (filterReferral === 'All' || c.referral === filterReferral)));
+
+      const [selectedCustId, setSelectedCustId] = useState('');
+      const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
+      const [isPaid, setIsPaid] = useState(false);
+      const [paidDate, setPaidDate] = useState(new Date().toISOString().split('T')[0]);
+      const [isEditingPayment, setIsEditingPayment] = useState(false);
+
+      const [isWithdraw, setIsWithdraw] = useState(false);
+      const [withdrawDate, setWithdrawDate] = useState(new Date().toISOString().split('T')[0]);
+      const [disbursedBy, setDisbursedBy] = useState(isPartnerAdmin ? user.referral : coreReferrals[0]);
+      const [withdrawAmount, setWithdrawAmount] = useState(0);
+
+      const [isLoading, setIsLoading] = useState(false);
+      const [msg, setMsg] = useState('');
+
+      useEffect(() => {
+        if (filteredCustomers.length > 0) {
+          if (!filteredCustomers.find(c => c.id === selectedCustId)) {
+            setSelectedCustId(filteredCustomers[0].id);
+          }
+        } else {
+          setSelectedCustId('');
+        }
+      }, [filterReferral, customers]);
+
+      const currentCustomer = customers.find(c => c.id === selectedCustId);
+      const isAlreadyWithdrawn = Boolean(currentCustomer && currentCustomer.withdrawal && currentCustomer.withdrawal.isWithdrawn);
+      const currentPayRecord = currentCustomer && currentCustomer.payments && currentCustomer.payments[selectedMonthIndex];
+      const isAlreadyPaid = Boolean(currentPayRecord && currentPayRecord.isPaid);
+
+      useEffect(() => {
+        if (!currentCustomer) return;
+        const pay = currentCustomer.payments && currentCustomer.payments[selectedMonthIndex];
+        if (pay && pay.isPaid) {
+          setIsPaid(true);
+          setPaidDate(pay.paidDate || new Date().toISOString().split('T')[0]);
+          setIsEditingPayment(false); // Lock fields by default if already paid
+        } else {
+          setIsPaid(false);
+          setPaidDate(new Date().toISOString().split('T')[0]);
+          setIsEditingPayment(true); // Open for editing if unpaid
+        }
+
+        if (currentCustomer.withdrawal && currentCustomer.withdrawal.isWithdrawn) {
+          setIsWithdraw(true);
+          setWithdrawDate(currentCustomer.withdrawal.withdrawDate || new Date().toISOString().split('T')[0]);
+          setDisbursedBy(currentCustomer.withdrawal.disbursedBy || currentCustomer.referral);
+          setWithdrawAmount(currentCustomer.withdrawal.amount || 0);
+        } else {
+          setIsWithdraw(false);
+          setWithdrawDate(new Date().toISOString().split('T')[0]);
+          setDisbursedBy(currentCustomer.referral);
+          const scheme = config.schemes[currentCustomer.schemeType] || Object.values(config.schemes)[0];
+          setWithdrawAmount(scheme && scheme.received ? scheme.received[selectedMonthIndex] : 0);
+        }
+      }, [selectedCustId, selectedMonthIndex, customers]);
+
+      const handleSavePayment = async (e) => {
+        e.preventDefault();
+        if (!selectedCustId) return;
+        setIsLoading(true);
+        setMsg('');
+
+        try {
+          await fetch('/api/payments/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              version,
+              customerId: selectedCustId,
+              monthIndex: selectedMonthIndex,
+              isPaid,
+              paidDate
+            })
+          });
+
+          if (!isAlreadyWithdrawn) {
+            await fetch('/api/withdrawals/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                version,
+                customerId: selectedCustId,
+                isWithdrawn: isWithdraw,
+                withdrawDate,
+                disbursedBy,
+                amount: parseFloat(withdrawAmount) || 0
+              })
+            });
+
+            if (isWithdraw && currentCustomer) {
+              await fetch('/api/accounts/disbursals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  version,
+                  monthIndex: selectedMonthIndex,
+                  customerId: selectedCustId,
+                  customerName: currentCustomer.name,
+                  disbursedBy,
+                  amount: parseFloat(withdrawAmount) || 0,
+                  date: withdrawDate,
+                  notes: `Auction payout for Month ${selectedMonthIndex + 1}`
+                })
+              });
+            }
+          }
+
+          setMsg('Record updated successfully!');
+          setIsEditingPayment(false);
+          refreshData();
+          setTimeout(() => setMsg(''), 3000);
+        } catch (e) {
+          alert("Error updating record");
+        }
+        setIsLoading(false);
+      };
+
+      const handleDeleteCustomer = async () => {
+        if (!selectedCustId) return;
+        if (!confirm(`Are you sure you want to delete ${currentCustomer?.name}?`)) return;
+
+        try {
+          await fetch('/api/customers', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version, customerId: selectedCustId })
+          });
+          setMsg('Customer removed');
+          refreshData();
+        } catch (e) {
+          alert("Error deleting customer");
+        }
+      };
+
+      return (
+        <div className="admin-card fade-in" style={{ maxWidth: '700px', margin: '0 auto' }}>
+          <h2 className="admin-title">✍️ Manage Payments & Auction Disbursals ({version})</h2>
+
+          {!isPartnerAdmin && (
+            <div className="form-group" style={{ marginBottom: '16px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <label style={{ color: '#0b1f3a' }}>Filter by Person:</label>
+              <select value={filterReferral} onChange={e => setFilterReferral(e.target.value)}>
+                {coreReferrals.map(r => <option key={r} value={r}>{r}</option>)}
+                <option value="All">All Persons</option>
+              </select>
+            </div>
+          )}
+
+          {filteredCustomers.length === 0 ? (
+            <div style={{ color: '#dc2626', fontWeight: 'bold', padding: '20px 0' }}>No customers found for this person</div>
+          ) : (
+            <form onSubmit={handleSavePayment} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group">
+                <label>Select Customer:</label>
+                <select value={selectedCustId} onChange={e => setSelectedCustId(e.target.value)}>
+                  {filteredCustomers.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} — Rs.{c.schemeType} ({c.referral})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Installment Month:</label>
+                <select value={selectedMonthIndex} onChange={e => setSelectedMonthIndex(parseInt(e.target.value))}>
+                  {config.months && config.months.map((mObj, idx) => (
+                    <option key={idx} value={idx}>
+                      Month {idx + 1}: {mObj.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* RECORD PAYMENT SECTION WITH DISABLE & EDIT BUTTON LOGIC */}
+              <div style={{ padding: '16px', background: isAlreadyPaid && !isEditingPayment ? '#f8fafc' : '#f0fdf4', borderRadius: '10px', border: `1.5px solid ${isAlreadyPaid && !isEditingPayment ? '#cbd5e1' : '#bbf7d0'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      id="paidCheck"
+                      checked={isPaid}
+                      disabled={isAlreadyPaid && !isEditingPayment}
+                      onChange={e => setIsPaid(e.target.checked)}
+                      style={{ width: '22px', height: '22px', cursor: (isAlreadyPaid && !isEditingPayment) ? 'not-allowed' : 'pointer' }}
+                    />
+                    <label htmlFor="paidCheck" style={{ fontSize: '16px', fontWeight: '800', color: isPaid ? '#15803d' : '#334155', cursor: (isAlreadyPaid && !isEditingPayment) ? 'not-allowed' : 'pointer' }}>
+                      {isPaid ? '✅ Mark as Paid' : '⭕ Unpaid (Click to Mark Paid)'}
+                    </label>
+                  </div>
+
+                  {/* EDIT PAYMENT BUTTON WHEN LOCKED */}
+                  {isAlreadyPaid && !isEditingPayment && (
+                    <button
+                      type="button"
+                      className="tabbtn active"
+                      onClick={() => setIsEditingPayment(true)}
+                      style={{ background: '#0284c7', color: '#ffffff', border: 'none', padding: '6px 14px', fontSize: '12px', borderRadius: '8px' }}
+                    >
+                      ✏️ Edit Payment Date / Status
+                    </button>
+                  )}
+                </div>
+
+                {isAlreadyPaid && !isEditingPayment && (
+                  <div style={{ fontSize: '12px', color: '#64748b', marginTop: '8px', fontWeight: '600' }}>
+                    🔒 Customer payment is locked. Click <strong>"✏️ Edit Payment Date / Status"</strong> above to make changes.
+                  </div>
+                )}
+
+                {isPaid && (() => {
+                  const colMonthIdx = (typeof window.getSchemeMonthFromDate === 'function')
+                    ? (window.getSchemeMonthFromDate(paidDate, version) ?? selectedMonthIndex)
+                    : selectedMonthIndex;
+                  const colMonthObj = (config.months && config.months[colMonthIdx]) || { name: `Month ${colMonthIdx + 1}` };
+                  const isAdvance = colMonthIdx !== selectedMonthIndex;
+
+                  return (
+                    <div style={{ marginTop: '12px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '700' }}>Credit Received Date: *</label>
+                      <input
+                        type="date"
+                        value={paidDate}
+                        disabled={isAlreadyPaid && !isEditingPayment}
+                        onChange={e => setPaidDate(e.target.value)}
+                        required
+                        style={{ background: (isAlreadyPaid && !isEditingPayment) ? '#f1f5f9' : '#ffffff' }}
+                      />
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: isAdvance ? '#fef3c7' : '#f0fdf4',
+                        border: `1.5px solid ${isAdvance ? '#f59e0b' : '#86efac'}`,
+                        fontSize: '12px',
+                        fontWeight: '700',
+                        color: isAdvance ? '#b45309' : '#15803d',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <span>{isAdvance ? '⚡' : '📅'}</span>
+                        <span>
+                          <strong>Balance Sheet Attribution:</strong> Credited to <strong>Month {colMonthIdx + 1}: {colMonthObj.name}</strong> Collections
+                          {isAdvance && ' (Advance Collection based on Payment Date)'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div style={{ padding: '16px', background: isAlreadyWithdrawn ? '#f1f5f9' : '#fef2f2', borderRadius: '10px', border: `1.5px solid ${isAlreadyWithdrawn ? '#cbd5e1' : '#fecaca'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <input
+                    type="checkbox"
+                    id="withCheck"
+                    checked={isWithdraw}
+                    disabled={isAlreadyWithdrawn}
+                    onChange={e => !isAlreadyWithdrawn && setIsWithdraw(e.target.checked)}
+                    style={{ width: '22px', height: '22px', cursor: isAlreadyWithdrawn ? 'not-allowed' : 'pointer' }}
+                  />
+                  <label htmlFor="withCheck" style={{ fontSize: '15px', fontWeight: '800', color: isAlreadyWithdrawn ? '#64748b' : (isWithdraw ? '#b91c1c' : '#334155'), cursor: isAlreadyWithdrawn ? 'not-allowed' : 'pointer' }}>
+                    {isAlreadyWithdrawn ? '🔒 Auction Payout Already Recorded (Locked)' : '🏷️ Record Auction Payout (Withdrawn)'}
+                  </label>
+                </div>
+
+                {isWithdraw && (
+                  <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px', opacity: isAlreadyWithdrawn ? 0.8 : 1 }}>
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: '700' }}>Payout Date:</label>
+                      <input
+                        type="date"
+                        value={withdrawDate}
+                        disabled={isAlreadyWithdrawn}
+                        onChange={e => setWithdrawDate(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: '700' }}>Disbursed By Person:</label>
+                      {isAlreadyWithdrawn ? (
+                        <input type="text" value={disbursedBy} disabled style={{ background: '#f8fafc', fontWeight: '700' }} />
+                      ) : (
+                        <select value={disbursedBy} onChange={e => setDisbursedBy(e.target.value)}>
+                          {coreReferrals.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '13px', fontWeight: '700' }}>Disbursed Amount (Rs.):</label>
+                      <input
+                        type="number"
+                        value={withdrawAmount}
+                        disabled={isAlreadyWithdrawn}
+                        onChange={e => setWithdrawAmount(e.target.value)}
+                        required
+                      />
+                    </div>
+                    {isAlreadyWithdrawn && (
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#64748b', marginTop: '4px' }}>
+                        ℹ️ This customer's auction payout has already been recorded and cannot be edited.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {msg && <div style={{ color: '#15803d', background: '#dcfce7', padding: '10px', borderRadius: '8px', fontWeight: 'bold' }}>✅ {msg}</div>}
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                <button type="submit" disabled={isLoading} style={{ flex: 1, padding: '12px' }}>
+                  {isLoading ? 'Saving...' : '💾 Save Record'}
+                </button>
+                <button type="button" className="danger" onClick={handleDeleteCustomer} style={{ padding: '12px' }}>
+                  🗑️ Delete
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // REPORTS VIEW
+    // ==========================================
+    function ReportsView({ user, config, version, coreReferrals }) {
+      const [reportData, setReportData] = useState(null);
+      const [isLoading, setIsLoading] = useState(true);
+
+      useEffect(() => {
+        setIsLoading(true);
+        fetch(`/api/reports?version=${version}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setReportData(data);
+            }
+          })
+          .catch(e => console.error("Error fetching reports", e))
+          .finally(() => setIsLoading(false));
+      }, [version]);
+
+      if (isLoading) {
+        return <div style={{ textAlign: 'center', padding: '50px', fontSize: '18px' }}>Loading Financial Report...</div>;
+      }
+
+      if (!reportData) {
+        return <div style={{ textAlign: 'center', padding: '50px' }}>No report data available</div>;
+      }
+
+      const totalOverallCollection = (reportData.monthlyStats || []).reduce((acc, m) => acc + m.totalCollection, 0);
+
+      return (
+        <div className="fade-in">
+          <div style={{ textAlign: 'center', marginBottom: '22px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a' }}>
+              📊 {config.title || 'JayanVijayan Chit Fund'} — {version} Report
+            </h2>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '14px', flexWrap: 'wrap' }}>
+              <div style={{ background: '#dcfce7', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#15803d', fontSize: '16px' }}>
+                💰 Total Collections: Rs. {totalOverallCollection.toLocaleString('en-IN')}
+              </div>
+              <div style={{ background: '#fee2e2', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#b91c1c', fontSize: '16px' }}>
+                🎉 Total Withdrawals: {reportData.totalWithdrawals} Members
+              </div>
+              <div style={{ background: '#e0f2fe', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#0369a1', fontSize: '16px' }}>
+                👥 Total Members: {reportData.totalCustomers}
+              </div>
+            </div>
+          </div>
+
+          <div className="passbook-table-container">
+            <table className="passbook-table">
+              <thead>
+                <tr>
+                  <th rowSpan="2" style={{ width: '50px' }}>#</th>
+                  <th rowSpan="2">Month</th>
+                  <th style={{ backgroundColor: '#047857', color: '#ffffff', fontSize: '14px' }}>Month Total</th>
+                  <th colSpan={coreReferrals.length} style={{ backgroundColor: '#1e40af', color: '#ffffff', fontSize: '14px' }}>
+                    Referral Split
+                  </th>
+                </tr>
+                <tr>
+                  <th style={{ backgroundColor: '#059669', color: '#ffffff' }}>Collections (Rs.)</th>
+                  {coreReferrals.map(r => (
+                    <th key={r} style={{ backgroundColor: '#2563eb', fontSize: '13px' }}>{r}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {reportData.monthlyStats && reportData.monthlyStats.map((item, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: '700' }}>{idx + 1}</td>
+                    <td style={{ fontWeight: '800' }}>{item.monthName || item.monthEn || `Month ${idx+1}`}</td>
+                    <td style={{ color: '#15803d', fontWeight: '900' }}>
+                      {item.totalCollection > 0 ? `Rs. ${item.totalCollection.toLocaleString('en-IN')}` : '-'}
+                    </td>
+                    {coreReferrals.map(r => {
+                      const amount = item.referralSplit[r] || 0;
+                      return (
+                        <td key={r} style={{ color: amount > 0 ? '#1d4ed8' : '#94a3b8', fontWeight: amount > 0 ? '700' : 'normal' }}>
+                          {amount > 0 ? `Rs. ${amount.toLocaleString('en-IN')}` : '-'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+
+</html>
