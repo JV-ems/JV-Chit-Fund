@@ -629,9 +629,27 @@
               />
             )}
           </div>
+          <AppFooter />
         </div>
       );
     }
+
+    // ==========================================
+    // APP FOOTER
+    // ==========================================
+    function AppFooter() {
+      return (
+        <footer className="app-footer">
+          <p style={{ margin: '0 0 4px 0' }}>
+            Powered by <strong>JV &amp; Sri Deverajan Kuzhumam</strong>
+          </p>
+          <div className="footer-badge">
+            ⚡ Official Digital Portal
+          </div>
+        </footer>
+      );
+    }
+
 
     // ==========================================
     // CHANGE PASSWORD MODAL
@@ -905,10 +923,12 @@
                   ← Back to Sign In
                 </button>
               </form>
+              <AppFooter />
             </div>
           </div>
         );
       }
+
 
       return (
         <div className="login-screen">
@@ -959,10 +979,12 @@
                 {isLoading ? 'Authenticating...' : 'Sign In'}
               </button>
             </form>
+            <AppFooter />
           </div>
         </div>
       );
     }
+
 
 
     // ==========================================

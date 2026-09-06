@@ -1079,3 +1079,34 @@ select:focus, input:focus {
   box-shadow: 0 4px 15px rgba(9, 30, 58, 0.04);
 }
 
+/* App Footer */
+.app-footer {
+  margin-top: 40px;
+  padding: 20px 10px;
+  text-align: center;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.app-footer strong {
+  color: #0b1f3a;
+  font-weight: 700;
+}
+
+.app-footer .footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #0b1f3a, #1e3a8a);
+  color: #f8fafc;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(11, 31, 58, 0.15);
+  margin-top: 6px;
+}
+
+
