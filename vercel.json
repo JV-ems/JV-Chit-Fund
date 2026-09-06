@@ -2,13 +2,7 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "includeFiles": [
-        "index.html",
-        "styles.css",
-        "chitConfig.js",
-        "assests/**",
-        "Images JV/**"
-      ]
+      "includeFiles": "{index.html,styles.css,chitConfig.js,assests/**,Images JV/**}"
     }
   },
   "rewrites": [
