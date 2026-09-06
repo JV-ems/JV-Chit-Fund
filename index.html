@@ -397,6 +397,8 @@
         localStorage.removeItem('jv_logged_user');
       };
 
+      const [showChangePassModal, setShowChangePassModal] = useState(false);
+
       if (!user) {
         return (
           <LoginScreen
@@ -405,8 +407,6 @@
           />
         );
       }
-
-      const [showChangePassModal, setShowChangePassModal] = useState(false);
 
       const activeConfig = configs[selectedVersion] || configs['JV_1.0'] || configs['JV_3.0'] || {};
       const versionOptions = isMasterAdmin ? ['Overall', ...Object.keys(configs)] : Object.keys(configs);
