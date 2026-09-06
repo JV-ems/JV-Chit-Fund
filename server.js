@@ -56,7 +56,7 @@ function parseBody(req) {
   });
 }
 
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
   // Ensure DB connection is initialized before processing request
   try {
     await DB.initDatabase();
@@ -365,7 +365,7 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // Static File Serving
+  // Static File Serving (fallback for local development)
   let safePath = pathname;
   if (safePath === '/') safePath = '/index.html';
 
@@ -387,7 +387,9 @@ const server = http.createServer(async (req, res) => {
       res.end(content);
     }
   });
-});
+}
+
+const server = http.createServer(handleRequest);
 
 if (require.main === module) {
   async function startServer() {
@@ -409,4 +411,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = server;
+module.exports = handleRequest;
