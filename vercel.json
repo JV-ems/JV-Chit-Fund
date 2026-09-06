@@ -2,7 +2,8 @@
   "version": 2,
   "routes": [
     {
-      "handle": "filesystem"
+      "src": "/styles.css",
+      "dest": "/styles.css"
     },
     {
       "src": "/assets/(.*)",
@@ -13,8 +14,12 @@
       "dest": "/Images JV/$1"
     },
     {
+      "handle": "filesystem"
+    },
+    {
       "src": "/api/(.*)",
       "dest": "/api/index.js"
     }
   ]
 }
+
