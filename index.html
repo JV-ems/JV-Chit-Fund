@@ -33,6 +33,10 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    // Toggle constant: Set to true when you wish to enable JV 2.0 and JV 3.0
+    const ENABLE_FUTURE_VERSIONS = false;
+
+
     // ==========================================
     // EXCEL EXPORT HELPER FUNCTIONS
     // ==========================================
@@ -457,17 +461,30 @@
           {user.role === 'admin' && (
             <div className="version-bar">
               <strong style={{ color: '#0b1f3a', fontSize: '14px', marginRight: '6px' }}>Chit Scheme Version:</strong>
-              {versionOptions.map(v => (
-                <div
-                  key={v}
-                  className={`version-pill ${selectedVersion === v ? 'active' : ''}`}
-                  onClick={() => setSelectedVersion(v)}
-                >
-                  {v === 'Overall' ? '🌐 Overall' : `✨ ${v}`}
-                </div>
-              ))}
+              <div className="version-pills-container">
+                {versionOptions.map(v => {
+                  const isDisabled = !ENABLE_FUTURE_VERSIONS && (v === 'JV_2.0' || v === 'JV_3.0');
+                  return (
+                    <div
+                      key={v}
+                      className={`version-pill ${selectedVersion === v ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                      style={isDisabled ? { opacity: 0.5, cursor: 'not-allowed', background: '#f1f5f9', color: '#94a3b8', border: '1px dashed #cbd5e1' } : {}}
+                      onClick={() => {
+                        if (isDisabled) {
+                          alert(`${v} is currently disabled. Active version is JV 1.0.`);
+                          return;
+                        }
+                        setSelectedVersion(v);
+                      }}
+                    >
+                      {isDisabled ? `🔒 ${v} (Disabled)` : (v === 'Overall' ? '🌐 Overall' : `✨ ${v}`)}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
+
 
           {/* Navigation Tabs based on Role */}
           <div className="tabs" style={{ marginBottom: '22px' }}>
@@ -530,6 +547,13 @@
                   onClick={() => setCurrentTab('reports')}
                 >
                   📊 Scheme Report
+                </button>
+                <button
+                  className={`tabbtn ${currentTab === 'paid_status' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('paid_status')}
+                  style={{ background: currentTab === 'paid_status' ? '#15803d' : '#ffffff', color: currentTab === 'paid_status' ? '#ffffff' : '#15803d' }}
+                >
+                  🟢 Customer Paid List ({user.referral})
                 </button>
               </>
             )}
@@ -628,6 +652,18 @@
                 coreReferrals={coreReferrals}
               />
             )}
+
+            {/* 8. CUSTOMER PAID LIST STATUS */}
+            {currentTab === 'paid_status' && user.role === 'admin' && (
+              <CustomerPaidListView
+                user={user}
+                config={activeConfig}
+                version={selectedVersion}
+                customers={customers}
+                coreReferrals={coreReferrals}
+              />
+            )}
+
           </div>
           <AppFooter />
         </div>
@@ -2704,10 +2740,16 @@
               <div className="form-group">
                 <label>Chit Scheme Version *</label>
                 <select value={version} onChange={e => setVersion(e.target.value)}>
-                  {Object.keys(configs).map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
+                  {Object.keys(configs).map(v => {
+                    const isDisabled = !ENABLE_FUTURE_VERSIONS && (v === 'JV_2.0' || v === 'JV_3.0');
+                    return (
+                      <option key={v} value={v} disabled={isDisabled}>
+                        {v} {isDisabled ? '🔒 (Disabled)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
+
               </div>
 
               <div className="form-group">
@@ -3171,8 +3213,242 @@
       );
     }
 
+    // ==========================================
+    // OVERALL CUSTOMER PAID LIST VIEW
+    // ==========================================
+    function CustomerPaidListView({ user, config, version, customers, coreReferrals }) {
+      const isPartnerAdmin = user.role === 'admin' && user.username !== 'admin';
+      const activeReferral = isPartnerAdmin ? user.referral : (coreReferrals[0] || 'PLSSV');
+
+      const [selectedReferral, setSelectedReferral] = useState(activeReferral);
+      const [filterVersion, setFilterVersion] = useState(version || 'Overall');
+      const [searchTerm, setSearchTerm] = useState('');
+
+      const targetReferral = isPartnerAdmin ? user.referral : selectedReferral;
+
+      // Filter customers belonging to target referral
+      let filtered = customers.filter(c => {
+        if (targetReferral !== 'All' && c.referral !== targetReferral) return false;
+        if (filterVersion !== 'Overall' && c.version !== filterVersion) return false;
+        if (searchTerm.trim()) {
+          const s = searchTerm.toLowerCase();
+          return (c.name || '').toLowerCase().includes(s) || (c.mobile || '').includes(s);
+        }
+        return true;
+      });
+
+      // Calculate payment stats per customer
+      const processed = filtered.map(c => {
+        const payments = c.payments || [];
+        const paidMonths = payments.filter(p => p && p.isPaid);
+        const paidCount = paidMonths.length;
+        const totalMonths = 12;
+        const isFullyPaid = paidCount >= 12;
+
+        return {
+          ...c,
+          paidCount,
+          totalMonths,
+          isFullyPaid,
+          payments
+        };
+      });
+
+      // Separate into Paid (has >= 1 month paid) and Unpaid (0 months paid)
+      const paidCustomers = processed.filter(c => c.paidCount > 0);
+      const unpaidCustomers = processed.filter(c => c.paidCount === 0);
+
+      // Summary statistics
+      const totalCust = processed.length;
+      const fullyPaidCust = processed.filter(c => c.isFullyPaid).length;
+      const activePaidCust = processed.filter(c => c.paidCount > 0).length;
+      const zeroPaidCust = processed.filter(c => c.paidCount === 0).length;
+
+      return (
+        <div className="card fade-in">
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '14px' }}>
+            <div>
+              <h2 style={{ margin: 0, color: '#0b1f3a', fontSize: '22px', fontWeight: '900', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>🟢</span>
+                <span>Customer Paid Status ({targetReferral})</span>
+              </h2>
+              <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '13px' }}>
+                Month-by-month payment status. Paid months are highlighted in green.
+              </p>
+            </div>
+
+            {/* Referral selector for Master Admin */}
+            {!isPartnerAdmin && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <strong style={{ fontSize: '13px', color: '#0b1f3a' }}>Person:</strong>
+                <select value={selectedReferral} onChange={e => setSelectedReferral(e.target.value)} style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                  {coreReferrals.map(r => <option key={r} value={r}>{r}</option>)}
+                  <option value="All">All Persons</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Top Summary Bar */}
+          <div className="summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+            <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1.5px solid #cbd5e1', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Total Customers</div>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a', marginTop: '2px' }}>{totalCust}</div>
+            </div>
+
+            <div style={{ background: '#f0fdf4', padding: '14px', borderRadius: '10px', border: '1.5px solid #86efac', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase' }}>Paid Customers</div>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#15803d', marginTop: '2px' }}>{activePaidCust}</div>
+            </div>
+
+            <div style={{ background: '#f0fdf4', padding: '14px', borderRadius: '10px', border: '1.5px solid #86efac', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase' }}>Fully Paid (12M)</div>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#15803d', marginTop: '2px' }}>{fullyPaidCust}</div>
+            </div>
+
+            <div style={{ background: '#fef2f2', padding: '14px', borderRadius: '10px', border: '1.5px solid #fecaca', textAlign: 'center' }}>
+              <div style={{ fontSize: '11px', color: '#b91c1c', fontWeight: '700', textTransform: 'uppercase' }}>Pending / 0 Paid</div>
+              <div style={{ fontSize: '24px', fontWeight: '900', color: '#dc2626', marginTop: '2px' }}>{zeroPaidCust}</div>
+            </div>
+          </div>
+
+          {/* Controls Bar */}
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <input
+              type="text"
+              placeholder="🔍 Search customer name or mobile..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{ flex: 1, minWidth: '180px', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '13px' }}
+            />
+            <select
+              value={filterVersion}
+              onChange={e => setFilterVersion(e.target.value)}
+              style={{ padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '13px', fontWeight: '700' }}
+            >
+              <option value="Overall">🌐 All Versions</option>
+              <option value="JV_1.0">✨ JV 1.0</option>
+              <option value="JV_2.0" disabled={!ENABLE_FUTURE_VERSIONS}>🔒 JV 2.0 {!ENABLE_FUTURE_VERSIONS ? '(Disabled)' : ''}</option>
+              <option value="JV_3.0" disabled={!ENABLE_FUTURE_VERSIONS}>🔒 JV 3.0 {!ENABLE_FUTURE_VERSIONS ? '(Disabled)' : ''}</option>
+            </select>
+
+          </div>
+
+          {/* SECTION 1: PAID CUSTOMERS LIST */}
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '900', color: '#15803d', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', background: '#f0fdf4', padding: '10px 14px', borderRadius: '8px', borderLeft: '4px solid #16a34a' }}>
+              <span>🟢 Paid Customers ({paidCustomers.length})</span>
+            </h3>
+
+            {paidCustomers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
+                No paid customers recorded yet.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {paidCustomers.map(cust => (
+                  <div key={cust.id} style={{ background: '#ffffff', border: '1.5px solid #bbf7d0', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 8px rgba(22, 163, 74, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                      <div>
+                        <strong style={{ fontSize: '15px', color: '#0b1f3a' }}>#{cust.sno} {cust.name}</strong>
+                        <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '8px' }}>📞 {cust.mobile || 'N/A'}</span>
+                        <span style={{ fontSize: '11px', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '10px', fontWeight: '800', marginLeft: '8px' }}>{cust.version}</span>
+                      </div>
+
+                      {/* Total Paid Badge in Green */}
+                      <span style={{ background: '#15803d', color: '#ffffff', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '900', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        ✅ {cust.paidCount} Month{cust.paidCount > 1 ? 's' : ''} Paid
+                      </span>
+                    </div>
+
+                    {/* Month-wise Paid Status Pills */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                      {Array(12).fill(null).map((_, idx) => {
+                        const p = (cust.payments || [])[idx];
+                        const isPaid = p && p.isPaid;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              fontWeight: '800',
+                              background: isPaid ? '#15803d' : '#f1f5f9',
+                              color: isPaid ? '#ffffff' : '#94a3b8',
+                              border: isPaid ? '1px solid #166534' : '1px solid #cbd5e1'
+                            }}
+                          >
+                            M{idx + 1} {isPaid ? '✓' : ''}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 2: UNPAID / PENDING CUSTOMERS LIST */}
+          <div>
+            <h3 style={{ fontSize: '16px', fontWeight: '900', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', background: '#fef2f2', padding: '10px 14px', borderRadius: '8px', borderLeft: '4px solid #dc2626' }}>
+              <span>🔴 Pending / Unpaid Customers ({unpaidCustomers.length})</span>
+            </h3>
+
+            {unpaidCustomers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#15803d', background: '#f0fdf4', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                🎉 Great! All customers have recorded payments.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {unpaidCustomers.map(cust => (
+                  <div key={cust.id} style={{ background: '#ffffff', border: '1.5px solid #fecaca', borderRadius: '12px', padding: '14px', boxShadow: '0 2px 8px rgba(220, 38, 38, 0.05)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                      <div>
+                        <strong style={{ fontSize: '15px', color: '#0b1f3a' }}>#{cust.sno} {cust.name}</strong>
+                        <span style={{ fontSize: '12px', color: '#64748b', marginLeft: '8px' }}>📞 {cust.mobile || 'N/A'}</span>
+                        <span style={{ fontSize: '11px', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '10px', fontWeight: '800', marginLeft: '8px' }}>{cust.version}</span>
+                      </div>
+
+                      {/* Pending Badge */}
+                      <span style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '900' }}>
+                        ⚠️ 0 Months Paid (Pending)
+                      </span>
+                    </div>
+
+                    {/* Month-wise Status Pills: Unpaid months have NO green color */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                      {Array(12).fill(null).map((_, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            background: '#f1f5f9',
+                            color: '#94a3b8',
+                            border: '1px solid #cbd5e1'
+                          }}
+                        >
+                          M{idx + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
+
   </script>
 </body>
 
