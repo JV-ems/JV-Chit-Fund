@@ -406,11 +406,20 @@
         );
       }
 
+      const [showChangePassModal, setShowChangePassModal] = useState(false);
+
       const activeConfig = configs[selectedVersion] || configs['JV_1.0'] || configs['JV_3.0'] || {};
       const versionOptions = isMasterAdmin ? ['Overall', ...Object.keys(configs)] : Object.keys(configs);
 
       return (
         <div className="app-container fade-in">
+          {showChangePassModal && (
+            <ChangePasswordModal
+              user={user}
+              onClose={() => setShowChangePassModal(false)}
+            />
+          )}
+
           {/* Top Navbar Header */}
           <div className="header-nav">
             <div className="logo-area">
@@ -429,11 +438,20 @@
                 </span>
               </div>
 
+              <button
+                type="button"
+                onClick={() => setShowChangePassModal(true)}
+                style={{ background: '#f1f5f9', color: '#0b1f3a', border: '1px solid #cbd5e1', cursor: 'pointer', padding: '6px 12px', borderRadius: '6px', fontSize: '13px', fontWeight: '600', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                🔒 Change Password
+              </button>
+
               <button className="danger" onClick={handleLogout}>
                 🚪 Logout
               </button>
             </div>
           </div>
+
 
           {/* Version Selector */}
           {user.role === 'admin' && (
@@ -616,17 +634,154 @@
     }
 
     // ==========================================
+    // CHANGE PASSWORD MODAL
+    // ==========================================
+    function ChangePasswordModal({ user, onClose }) {
+      const [oldPassword, setOldPassword] = useState('');
+      const [newPassword, setNewPassword] = useState('');
+      const [confirmPassword, setConfirmPassword] = useState('');
+      const [msg, setMsg] = useState('');
+      const [err, setErr] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        setMsg('');
+        setErr('');
+
+        if (newPassword !== confirmPassword) {
+          setErr('New password and Confirm password do not match.');
+          return;
+        }
+
+        if (newPassword.length < 4) {
+          setErr('Password must be at least 4 characters long.');
+          return;
+        }
+
+        setIsLoading(true);
+
+        try {
+          const res = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: user.username || user.mobile || user.referral,
+              oldPassword,
+              newPassword
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setMsg('Password updated successfully in database!');
+            setOldPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setTimeout(() => {
+              onClose();
+            }, 1500);
+          } else {
+            setErr(data.message || 'Failed to change password.');
+          }
+        } catch (e) {
+          setErr('Server error connecting to API');
+        }
+        setIsLoading(false);
+      };
+
+      return (
+        <div className="modal-backdrop fade-in" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="modal-card" style={{ background: '#fff', padding: '24px', borderRadius: '12px', width: '360px', maxWidth: '90%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, color: '#0b1f3a', fontSize: '18px' }}>🔑 Change Password</h3>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer' }}>✖</button>
+            </div>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>User Identity</label>
+                <input type="text" value={user.username || user.name || user.referral} disabled style={{ background: '#f1f5f9', cursor: 'not-allowed' }} />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Current Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter current password"
+                  value={oldPassword}
+                  onChange={e => setOldPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>New Password</label>
+                <input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>Confirm New Password</label>
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              {msg && (
+                <div style={{ color: '#15803d', background: '#dcfce7', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' }}>
+                  ✅ {msg}
+                </div>
+              )}
+
+              {err && (
+                <div style={{ color: '#dc2626', background: '#fee2e2', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '600' }}>
+                  ⚠️ {err}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" onClick={onClose} style={{ flex: 1, background: '#e2e8f0', color: '#334155', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={isLoading} style={{ flex: 1, background: '#0b1f3a', color: '#fff', border: 'none', padding: '10px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>
+                  {isLoading ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
     // LOGIN SCREEN
     // ==========================================
     function LoginScreen({ coreReferrals, onLoginSuccess }) {
       const [adminUser, setAdminUser] = useState(coreReferrals[0] || 'PLSSV');
       const [password, setPassword] = useState('');
       const [errorMsg, setErrorMsg] = useState('');
+      const [successMsg, setSuccessMsg] = useState('');
       const [isLoading, setIsLoading] = useState(false);
+
+      // Forgot Password State
+      const [isForgotPass, setIsForgotPass] = useState(false);
+      const [forgotUser, setForgotUser] = useState('');
+      const [newPassword, setNewPassword] = useState('');
+      const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
       const handleLogin = async (e) => {
         e.preventDefault();
         setErrorMsg('');
+        setSuccessMsg('');
         setIsLoading(true);
 
         try {
@@ -646,6 +801,114 @@
         }
         setIsLoading(false);
       };
+
+      const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        setErrorMsg('');
+        setSuccessMsg('');
+
+        if (newPassword !== confirmNewPassword) {
+          setErrorMsg('New password and Confirm password do not match.');
+          return;
+        }
+
+        if (newPassword.length < 4) {
+          setErrorMsg('Password must be at least 4 characters long.');
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          const res = await fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: forgotUser, newPassword })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setSuccessMsg('Password updated successfully in database! You can now log in.');
+            setForgotUser('');
+            setNewPassword('');
+            setConfirmNewPassword('');
+            setTimeout(() => {
+              setIsForgotPass(false);
+              setSuccessMsg('');
+            }, 2000);
+          } else {
+            setErrorMsg(data.message || 'Password reset failed.');
+          }
+        } catch (e) {
+          setErrorMsg('Server error connecting to API');
+        }
+        setIsLoading(false);
+      };
+
+      if (isForgotPass) {
+        return (
+          <div className="login-screen">
+            <div className="login-card fade-in">
+              <img src="assests/logo.png" alt="JV Logo" style={{ width: '84px', height: '84px', borderRadius: '50%', border: '3px solid #d4af37', boxShadow: '0 6px 20px rgba(212, 175, 55, 0.35)', margin: '0 auto 12px auto' }} />
+              <h2>Reset Password</h2>
+              <p>Update credentials directly in MongoDB database</p>
+
+              <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '14px', textAlign: 'left', marginTop: '16px' }}>
+                <div className="form-group">
+                  <label>Username / Mobile Number</label>
+                  <input
+                    type="text"
+                    placeholder="Enter Username or Mobile (e.g. PLSSV, admin, 9876543210)"
+                    value={forgotUser}
+                    onChange={e => setForgotUser(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Confirm New Password</label>
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmNewPassword}
+                    onChange={e => setConfirmNewPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {successMsg && (
+                  <div style={{ color: '#15803d', background: '#dcfce7', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                    ✅ {successMsg}
+                  </div>
+                )}
+
+                {errorMsg && (
+                  <div style={{ color: '#dc2626', background: '#fee2e2', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                    ⚠️ {errorMsg}
+                  </div>
+                )}
+
+                <button type="submit" disabled={isLoading} style={{ marginTop: '6px', padding: '12px' }}>
+                  {isLoading ? 'Resetting Password...' : 'Reset Password in DB'}
+                </button>
+
+                <button type="button" onClick={() => { setIsForgotPass(false); setErrorMsg(''); setSuccessMsg(''); }} style={{ background: 'none', border: 'none', color: '#0b1f3a', cursor: 'pointer', fontSize: '13px', fontWeight: '600', textDecoration: 'underline', marginTop: '4px' }}>
+                  ← Back to Sign In
+                </button>
+              </form>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="login-screen">
@@ -676,9 +939,14 @@
                   onChange={e => setPassword(e.target.value)}
                   required
                 />
-                <small style={{ color: '#64748b', fontSize: '11px', marginTop: '2px' }}>
-                  {adminUser === 'admin' ? 'Default: admin123' : 'Partner Default: 1234'}
-                </small>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                  <small style={{ color: '#64748b', fontSize: '11px' }}>
+                    {adminUser === 'admin' ? 'Default: admin123' : 'Partner Default: 1234'}
+                  </small>
+                  <button type="button" onClick={() => { setIsForgotPass(true); setErrorMsg(''); setSuccessMsg(''); }} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '11px', fontWeight: '600', textDecoration: 'underline', padding: 0 }}>
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
 
               {errorMsg && (
@@ -695,6 +963,7 @@
         </div>
       );
     }
+
 
     // ==========================================
     // MASTER ADMIN OVERVIEW
@@ -2329,10 +2598,19 @@
       const availableSchemes = currentConfig.schemes ? Object.keys(currentConfig.schemes) : ['1000', '2500', '5000'];
 
       useEffect(() => {
+        if (selectedVersion && selectedVersion !== 'Overall') {
+          setVersion(selectedVersion);
+        } else if (selectedVersion === 'Overall') {
+          setVersion('JV_1.0');
+        }
+      }, [selectedVersion]);
+
+      useEffect(() => {
         if (!availableSchemes.includes(schemeType)) {
           setSchemeType(availableSchemes[0] || '1000');
         }
       }, [version]);
+
 
       const handleSubmit = async (e) => {
         e.preventDefault();

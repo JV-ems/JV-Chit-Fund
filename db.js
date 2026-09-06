@@ -211,6 +211,49 @@ const DB = {
     return users.map(({ passwordHash, ...u }) => u);
   },
 
+  async changePassword(usernameOrMobile, oldPassword, newPassword) {
+    const trimmed = (usernameOrMobile || '').trim();
+    if (!trimmed || !oldPassword || !newPassword) {
+      return { success: false, message: 'All fields (Username, Current Password, New Password) are required' };
+    }
+    const oldHash = hashPassword(oldPassword);
+    const user = await User.findOne({
+      $or: [
+        { username: { $regex: new RegExp(`^${trimmed}$`, 'i') } },
+        { mobile: trimmed }
+      ],
+      passwordHash: oldHash
+    });
+    if (!user) {
+      return { success: false, message: 'Current password is incorrect' };
+    }
+    const newHash = hashPassword(newPassword);
+    user.passwordHash = newHash;
+    await user.save();
+    return { success: true, message: 'Password changed successfully!' };
+  },
+
+  async resetPassword(usernameOrMobile, newPassword) {
+    const trimmed = (usernameOrMobile || '').trim();
+    if (!trimmed || !newPassword) {
+      return { success: false, message: 'Username/Mobile and New Password are required' };
+    }
+    const user = await User.findOne({
+      $or: [
+        { username: { $regex: new RegExp(`^${trimmed}$`, 'i') } },
+        { mobile: trimmed }
+      ]
+    });
+    if (!user) {
+      return { success: false, message: 'User or Mobile number not found' };
+    }
+    const newHash = hashPassword(newPassword);
+    user.passwordHash = newHash;
+    await user.save();
+    return { success: true, message: 'Password reset successfully!' };
+  },
+
+
   // Customer Management
   async getCustomers(version = 'JV_3.0', referral = null) {
     const query = { version };
