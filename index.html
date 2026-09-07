@@ -3354,7 +3354,7 @@
                         const payable = (scheme && scheme.monthlyPayable && scheme.monthlyPayable[idx]) || (scheme && scheme.basePayable) || cust.schemeType;
 
                         const currentSchemeMonth = getCurrentSchemeMonthIndex(cust.version || 'JV_1.0');
-                        const isDueOrPast = idx <= currentSchemeMonth;
+                        const isCurrentMonth = (idx === currentSchemeMonth);
 
                         return (
                           <div
@@ -3373,21 +3373,23 @@
                             }}
                           >
                             <span>M{idx + 1} {isPaid ? '✓' : ''}</span>
-                            {!isPaid && isDueOrPast && (
+                            {!isPaid && (
                               <button
                                 type="button"
-                                title={`Send WhatsApp Reminder for ${mName}`}
-                                onClick={() => sendWhatsAppReminder(cust, mName, payable)}
+                                disabled={!isCurrentMonth}
+                                title={isCurrentMonth ? `Send WhatsApp Reminder for ${mName}` : `WhatsApp reminder disabled for non-current month`}
+                                onClick={() => isCurrentMonth && sendWhatsAppReminder(cust, mName, payable)}
                                 style={{
-                                  background: '#25D366',
-                                  color: '#fff',
+                                  background: isCurrentMonth ? '#25D366' : '#e2e8f0',
+                                  color: isCurrentMonth ? '#fff' : '#94a3b8',
                                   border: 'none',
                                   borderRadius: '4px',
                                   padding: '2px 6px',
                                   fontSize: '10px',
                                   fontWeight: '800',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                  cursor: isCurrentMonth ? 'pointer' : 'not-allowed',
+                                  boxShadow: isCurrentMonth ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                  opacity: isCurrentMonth ? 1 : 0.7
                                 }}
                               >
                                 📲 Send
@@ -3449,7 +3451,7 @@
                         const payable = (scheme && scheme.monthlyPayable && scheme.monthlyPayable[idx]) || (scheme && scheme.basePayable) || cust.schemeType;
 
                         const currentSchemeMonth = getCurrentSchemeMonthIndex(cust.version || 'JV_1.0');
-                        const isDueOrPast = idx <= currentSchemeMonth;
+                        const isCurrentMonth = (idx === currentSchemeMonth);
 
                         return (
                           <div
@@ -3468,26 +3470,26 @@
                             }}
                           >
                             <span>M{idx + 1}</span>
-                            {isDueOrPast && (
-                              <button
-                                type="button"
-                                title={`Send WhatsApp Reminder for ${mName}`}
-                                onClick={() => sendWhatsAppReminder(cust, mName, payable)}
-                                style={{
-                                  background: '#25D366',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  padding: '2px 6px',
-                                  fontSize: '10px',
-                                  fontWeight: '800',
-                                  cursor: 'pointer',
-                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                                }}
-                              >
-                                📲 Send
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              disabled={!isCurrentMonth}
+                              title={isCurrentMonth ? `Send WhatsApp Reminder for ${mName}` : `WhatsApp reminder disabled for non-current month`}
+                              onClick={() => isCurrentMonth && sendWhatsAppReminder(cust, mName, payable)}
+                              style={{
+                                background: isCurrentMonth ? '#25D366' : '#e2e8f0',
+                                color: isCurrentMonth ? '#fff' : '#94a3b8',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '2px 6px',
+                                fontSize: '10px',
+                                fontWeight: '800',
+                                cursor: isCurrentMonth ? 'pointer' : 'not-allowed',
+                                boxShadow: isCurrentMonth ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                                opacity: isCurrentMonth ? 1 : 0.7
+                              }}
+                            >
+                              📲 Send
+                            </button>
                           </div>
                         );
                       })}
