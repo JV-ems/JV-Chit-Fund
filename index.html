@@ -933,6 +933,15 @@
       return { total, schemeCounts };
     }
 
+    function getCurrentSchemeMonthIndex(version = 'JV_1.0') {
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (typeof window.getSchemeMonthFromDate === 'function') {
+        const idx = window.getSchemeMonthFromDate(todayStr, version);
+        if (idx !== null && idx !== undefined) return idx;
+      }
+      return 0;
+    }
+
     // ==========================================
     // MASTER ADMIN OVERVIEW
     // ==========================================
@@ -3344,6 +3353,9 @@
                         const scheme = config.schemes && (config.schemes[cust.schemeType] || Object.values(config.schemes)[0]);
                         const payable = (scheme && scheme.monthlyPayable && scheme.monthlyPayable[idx]) || (scheme && scheme.basePayable) || cust.schemeType;
 
+                        const currentSchemeMonth = getCurrentSchemeMonthIndex(cust.version || 'JV_1.0');
+                        const isDueOrPast = idx <= currentSchemeMonth;
+
                         return (
                           <div
                             key={idx}
@@ -3361,7 +3373,7 @@
                             }}
                           >
                             <span>M{idx + 1} {isPaid ? '✓' : ''}</span>
-                            {!isPaid && (
+                            {!isPaid && isDueOrPast && (
                               <button
                                 type="button"
                                 title={`Send WhatsApp Reminder for ${mName}`}
@@ -3436,6 +3448,9 @@
                         const scheme = config.schemes && (config.schemes[cust.schemeType] || Object.values(config.schemes)[0]);
                         const payable = (scheme && scheme.monthlyPayable && scheme.monthlyPayable[idx]) || (scheme && scheme.basePayable) || cust.schemeType;
 
+                        const currentSchemeMonth = getCurrentSchemeMonthIndex(cust.version || 'JV_1.0');
+                        const isDueOrPast = idx <= currentSchemeMonth;
+
                         return (
                           <div
                             key={idx}
@@ -3453,24 +3468,26 @@
                             }}
                           >
                             <span>M{idx + 1}</span>
-                            <button
-                              type="button"
-                              title={`Send WhatsApp Reminder for ${mName}`}
-                              onClick={() => sendWhatsAppReminder(cust, mName, payable)}
-                              style={{
-                                background: '#25D366',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: '4px',
-                                padding: '2px 6px',
-                                fontSize: '10px',
-                                fontWeight: '800',
-                                cursor: 'pointer',
-                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                              }}
-                            >
-                              📲 Send
-                            </button>
+                            {isDueOrPast && (
+                              <button
+                                type="button"
+                                title={`Send WhatsApp Reminder for ${mName}`}
+                                onClick={() => sendWhatsAppReminder(cust, mName, payable)}
+                                style={{
+                                  background: '#25D366',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '2px 6px',
+                                  fontSize: '10px',
+                                  fontWeight: '800',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                }}
+                              >
+                                📲 Send
+                              </button>
+                            )}
                           </div>
                         );
                       })}
