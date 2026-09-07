@@ -4,6 +4,7 @@ const path = require('path');
 const url = require('url');
 const DB = require('./db');
 const { CHIT_CONFIGS, CORE_REFERRALS, getSchemeMonthFromDate } = require('./chitConfig');
+const { logLoginActivity } = require('./googleSheetLogger');
 
 const PORT = process.env.PORT || 3000;
 
@@ -108,6 +109,9 @@ async function handleRequest(req, res) {
         if (user.role === 'customer' && user.customerId && user.version) {
           customerData = await DB.getCustomerById(user.version, user.customerId);
         }
+
+        // Record successful login activity to Google Sheet
+        logLoginActivity(req, user.username || username);
 
         return sendJSON(res, 200, {
           success: true,
