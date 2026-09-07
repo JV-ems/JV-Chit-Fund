@@ -46,6 +46,10 @@ const UserSchema = new mongoose.Schema({
 
 const CustomerSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
+  mainCustomerId: { type: String, default: null },
+  shortCustomerId: { type: String, default: null },
+  seqNo: { type: Number, default: 0 },
+  password: { type: String, default: '1234' },
   sno: { type: Number, default: 0 },
   name: { type: String, required: true },
   mobile: { type: String, default: '' },
@@ -116,6 +120,32 @@ function readJSONFile(file, defaultData = []) {
   }
 }
 
+function generateCustomerIDs(version, schemeType, seqNo, dateInput = null) {
+  const verStr = String(version || 'JV_1.0');
+  const parts = verStr.split('_');
+  const verNum = parts[1] ? parts[1].split('.')[0] : '1';
+
+  let schemeNum = 1;
+  const cfg = CHIT_CONFIGS[verStr];
+  if (cfg && cfg.schemes) {
+    const keys = Object.keys(cfg.schemes);
+    const idx = keys.indexOf(String(schemeType));
+    if (idx !== -1) {
+      schemeNum = idx + 1;
+    }
+  } else {
+    if (String(schemeType) === '2500') schemeNum = 2;
+    else if (String(schemeType) === '5000') schemeNum = 3;
+  }
+
+  const year = dateInput ? new Date(dateInput).getFullYear() : new Date().getFullYear();
+  const seqPadded = String(seqNo || 1).padStart(3, '0');
+
+  const mainCustomerId = `${verNum}JV${schemeNum}${year}${seqPadded}`;
+  const shortCustomerId = `JV${seqPadded}`;
+  return { mainCustomerId, shortCustomerId };
+}
+
 // Connect to MongoDB Atlas & Migrate JSON data if collections are empty
 async function initDatabase() {
   try {
@@ -134,18 +164,33 @@ async function initDatabase() {
       let jsonUsers = readJSONFile(FILES.users, []);
       if (!jsonUsers || jsonUsers.length === 0) {
         jsonUsers = [
-          { id: 'adm_1', username: 'PLSSV', name: 'PLSSV (Partner Admin)', role: 'admin', referral: 'PLSSV', passwordHash: hashPassword('1234') },
-          { id: 'adm_2', username: 'Arun', name: 'Arun (Partner Admin)', role: 'admin', referral: 'Arun', passwordHash: hashPassword('1234') },
-          { id: 'adm_3', username: 'Varatha', name: 'Varatha (Partner Admin)', role: 'admin', referral: 'Varatha', passwordHash: hashPassword('1234') },
-          { id: 'adm_4', username: 'Ramana', name: 'Ramana (Partner Admin)', role: 'admin', referral: 'Ramana', passwordHash: hashPassword('1234') },
-          { id: 'adm_5', username: 'Vicky', name: 'Vicky (Partner Admin)', role: 'admin', referral: 'Vicky', passwordHash: hashPassword('1234') },
-          { id: 'adm_6', username: 'admin', name: 'Master Admin', role: 'admin', referral: 'All', passwordHash: hashPassword('admin123') }
+          { id: 'adm_1', username: 'PLSSV', name: 'PLSSV (Partner Admin)', role: 'admin', referral: 'PLSSV', mobile: '6384625665', passwordHash: hashPassword('1234') },
+          { id: 'adm_2', username: 'Arun', name: 'Arun (Partner Admin)', role: 'admin', referral: 'Arun', mobile: '9488517403', passwordHash: hashPassword('1234') },
+          { id: 'adm_3', username: 'Varatha', name: 'Varatha (Partner Admin)', role: 'admin', referral: 'Varatha', mobile: '7092202771', passwordHash: hashPassword('1234') },
+          { id: 'adm_4', username: 'Ramana', name: 'Ramana (Partner Admin)', role: 'admin', referral: 'Ramana', mobile: '6369999091', passwordHash: hashPassword('1234') },
+          { id: 'adm_5', username: 'Vicky', name: 'Vicky (Partner Admin)', role: 'admin', referral: 'Vicky', mobile: '9025445125', passwordHash: hashPassword('1234') },
+          { id: 'adm_6', username: 'admin', name: 'Master Admin', role: 'admin', referral: 'All', mobile: '', passwordHash: hashPassword('admin123') }
         ];
       }
       for (const u of jsonUsers) {
         await User.updateOne({ id: u.id }, { $set: u }, { upsert: true });
       }
       console.log('Users seeded successfully!');
+    }
+
+    // Update partner admin mobile numbers in MongoDB
+    const adminMobiles = {
+      'PLSSV': '6384625665',
+      'Arun': '9488517403',
+      'Varatha': '7092202771',
+      'Ramana': '6369999091',
+      'Vicky': '9025445125'
+    };
+    for (const [username, mobile] of Object.entries(adminMobiles)) {
+      await User.updateOne(
+        { username, role: 'admin' },
+        { $set: { mobile } }
+      );
     }
 
     // 2. Migrate Customers
@@ -160,6 +205,39 @@ async function initDatabase() {
         }
       }
       console.log('Customers seeded successfully!');
+    }
+
+    // Safely backfill missing customer IDs / password / seqNo for existing records
+    const existingCusts = await Customer.find({}).sort({ createdAt: 1, sno: 1 });
+    let currentSeq = 1;
+    for (const c of existingCusts) {
+      let needsUpdate = false;
+      const updates = {};
+
+      if (!c.seqNo || c.seqNo === 0) {
+        updates.seqNo = currentSeq;
+        needsUpdate = true;
+      } else {
+        currentSeq = Math.max(currentSeq, c.seqNo);
+      }
+
+      if (!c.password) {
+        updates.password = '1234';
+        needsUpdate = true;
+      }
+
+      if (!c.mainCustomerId || !c.shortCustomerId || c.mainCustomerId.startsWith('10JV') || c.mainCustomerId.startsWith('20JV') || c.mainCustomerId.startsWith('30JV')) {
+        const targetSeq = updates.seqNo || c.seqNo || currentSeq;
+        const ids = generateCustomerIDs(c.version, c.schemeType, targetSeq, c.createdAt);
+        updates.mainCustomerId = ids.mainCustomerId;
+        updates.shortCustomerId = ids.shortCustomerId;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await Customer.updateOne({ _id: c._id }, { $set: updates });
+      }
+      currentSeq++;
     }
 
     // 3. Migrate Accounts (Transfers & Disbursals)
@@ -214,13 +292,15 @@ const DB = {
   async changePassword(usernameOrMobile, oldPassword, newPassword) {
     const trimmed = (usernameOrMobile || '').trim();
     if (!trimmed || !oldPassword || !newPassword) {
-      return { success: false, message: 'All fields (Username, Current Password, New Password) are required' };
+      return { success: false, message: 'Current password and new password are required' };
     }
     const oldHash = hashPassword(oldPassword);
     const user = await User.findOne({
       $or: [
         { username: { $regex: new RegExp(`^${trimmed}$`, 'i') } },
-        { mobile: trimmed }
+        { mobile: trimmed },
+        { id: trimmed },
+        { referral: trimmed }
       ],
       passwordHash: oldHash
     });
@@ -241,7 +321,9 @@ const DB = {
     const user = await User.findOne({
       $or: [
         { username: { $regex: new RegExp(`^${trimmed}$`, 'i') } },
-        { mobile: trimmed }
+        { mobile: trimmed },
+        { id: trimmed },
+        { referral: trimmed }
       ]
     });
     if (!user) {
@@ -272,6 +354,12 @@ const DB = {
   async addCustomer({ name, mobile, referral, version = 'JV_3.0', schemeType = '1000', password = '1234' }) {
     const allCustsInVer = await Customer.find({ version }).lean();
     const maxSno = allCustsInVer.length > 0 ? Math.max(...allCustsInVer.map(c => c.sno || 0)) : 0;
+    
+    const allCustsAllVer = await Customer.find({}).lean();
+    const maxSeqNo = allCustsAllVer.length > 0 ? Math.max(...allCustsAllVer.map(c => c.seqNo || 0)) : 0;
+    const nextSeq = maxSeqNo + 1;
+
+    const ids = generateCustomerIDs(version, schemeType, nextSeq);
     const customerId = `CUST_${version.replace('.', '_')}_${Date.now()}`;
 
     // Initialize 12 months payment array
@@ -284,6 +372,10 @@ const DB = {
 
     const newCustomer = {
       id: customerId,
+      mainCustomerId: ids.mainCustomerId,
+      shortCustomerId: ids.shortCustomerId,
+      seqNo: nextSeq,
+      password: password || '1234',
       sno: maxSno + 1,
       name: name.trim(),
       mobile: mobile ? mobile.trim() : '',

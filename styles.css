@@ -1221,19 +1221,20 @@ html, body {
   }
 
   .version-pill {
-    flex: 1 1 calc(33.33% - 6px) !important;
+    flex: 1 1 auto !important;
     min-width: 85px !important;
     text-align: center !important;
     justify-content: center !important;
-    padding: 8px 6px !important;
+    padding: 8px 10px !important;
     font-size: 12px !important;
+    white-space: nowrap !important;
     box-sizing: border-box !important;
   }
 
   /* Navigation Tabs Equal Grid */
   .tabs {
-    display: grid !important;
-    grid-template-columns: repeat(2, 1fr) !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
     gap: 6px !important;
     width: 100% !important;
     padding: 0 !important;
@@ -1241,13 +1242,13 @@ html, body {
   }
 
   .tabbtn {
-    width: 100% !important;
     text-align: center !important;
     justify-content: center !important;
-    padding: 10px 6px !important;
+    padding: 8px 12px !important;
     font-size: 12px !important;
     font-weight: 700 !important;
     border-radius: 8px !important;
+    white-space: nowrap !important;
     margin: 0 !important;
     box-sizing: border-box !important;
   }
@@ -1267,7 +1268,7 @@ html, body {
 
   /* No Table Overflow: Fit 100% Viewport Width Cleanly */
   div[style*="overflowX"], div[style*="overflow-x"], .table-responsive, .table-container, .portrait-table-box {
-    overflow-x: hidden !important;
+    overflow-x: auto !important;
     width: 100% !important;
     box-sizing: border-box !important;
     border-radius: 8px !important;
@@ -1277,16 +1278,14 @@ html, body {
     width: 100% !important;
     min-width: 0 !important;
     max-width: 100% !important;
-    table-layout: fixed !important;
     font-size: 11px !important;
     box-sizing: border-box !important;
   }
 
   th, td {
-    padding: 6px 3px !important;
+    padding: 6px 4px !important;
     font-size: 10.5px !important;
-    word-wrap: break-word !important;
-    word-break: break-word !important;
+    word-break: normal !important;
     overflow-wrap: break-word !important;
   }
 
@@ -1320,8 +1319,9 @@ html, body {
   }
 
   .status-badge-chip {
-    padding: 2px 4px !important;
+    padding: 2px 6px !important;
     font-size: 9px !important;
+    white-space: nowrap !important;
   }
 
   .passbook-actions-bar {
@@ -1362,18 +1362,19 @@ html, body {
   }
 
   .version-pill {
-    flex: 1 1 calc(50% - 6px) !important;
     font-size: 11px !important;
+    white-space: nowrap !important;
   }
 
   .tabbtn {
     font-size: 11px !important;
-    padding: 8px 4px !important;
+    padding: 8px 6px !important;
+    white-space: nowrap !important;
   }
 
   th, td {
     font-size: 10px !important;
-    padding: 5px 2px !important;
+    padding: 5px 3px !important;
   }
 }
 

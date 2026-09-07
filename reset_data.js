@@ -20,12 +20,12 @@ function hashPassword(password) {
 }
 
 const defaultAdmins = [
-  { id: 'adm_1', username: 'PLSSV', name: 'PLSSV (Partner Admin)', role: 'admin', referral: 'PLSSV', passwordHash: hashPassword('1234') },
-  { id: 'adm_2', username: 'Arun', name: 'Arun (Partner Admin)', role: 'admin', referral: 'Arun', passwordHash: hashPassword('1234') },
-  { id: 'adm_3', username: 'Varatha', name: 'Varatha (Partner Admin)', role: 'admin', referral: 'Varatha', passwordHash: hashPassword('1234') },
-  { id: 'adm_4', username: 'Ramana', name: 'Ramana (Partner Admin)', role: 'admin', referral: 'Ramana', passwordHash: hashPassword('1234') },
-  { id: 'adm_5', username: 'Vicky', name: 'Vicky (Partner Admin)', role: 'admin', referral: 'Vicky', passwordHash: hashPassword('1234') },
-  { id: 'adm_6', username: 'admin', name: 'Master Admin', role: 'admin', referral: 'All', passwordHash: hashPassword('admin123') }
+  { id: 'adm_1', username: 'PLSSV', name: 'PLSSV (Partner Admin)', role: 'admin', referral: 'PLSSV', mobile: '6384625665', passwordHash: hashPassword('1234') },
+  { id: 'adm_2', username: 'Arun', name: 'Arun (Partner Admin)', role: 'admin', referral: 'Arun', mobile: '9488517403', passwordHash: hashPassword('1234') },
+  { id: 'adm_3', username: 'Varatha', name: 'Varatha (Partner Admin)', role: 'admin', referral: 'Varatha', mobile: '7092202771', passwordHash: hashPassword('1234') },
+  { id: 'adm_4', username: 'Ramana', name: 'Ramana (Partner Admin)', role: 'admin', referral: 'Ramana', mobile: '6369999091', passwordHash: hashPassword('1234') },
+  { id: 'adm_5', username: 'Vicky', name: 'Vicky (Partner Admin)', role: 'admin', referral: 'Vicky', mobile: '9025445125', passwordHash: hashPassword('1234') },
+  { id: 'adm_6', username: 'admin', name: 'Master Admin', role: 'admin', referral: 'All', mobile: '', passwordHash: hashPassword('admin123') }
 ];
 
 async function resetAllData() {

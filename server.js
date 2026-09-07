@@ -124,14 +124,6 @@ async function handleRequest(req, res) {
         return sendJSON(res, result.success ? 200 : 400, result);
       }
 
-      // Forgot Password / Reset Password
-      if (pathname === '/api/auth/forgot-password' && method === 'POST') {
-        const body = await parseBody(req);
-        const { username, newPassword } = body;
-        const result = await DB.resetPassword(username, newPassword);
-        return sendJSON(res, result.success ? 200 : 400, result);
-      }
-
 
       // 3. Get Customers
       if (pathname === '/api/customers' && method === 'GET') {
