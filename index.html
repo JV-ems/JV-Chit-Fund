@@ -934,7 +934,14 @@
     }
 
     function getCurrentSchemeMonthIndex(version = 'JV_1.0') {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const calMonth = today.getMonth() + 1;
+      if (version === 'JV_1.0') {
+        // Before October cycle starts (September = Month 9), default active month to October (Index 0)
+        if (calMonth === 9) return 0;
+        return (calMonth - 10 + 12) % 12;
+      }
+      const todayStr = today.toISOString().split('T')[0];
       if (typeof window.getSchemeMonthFromDate === 'function') {
         const idx = window.getSchemeMonthFromDate(todayStr, version);
         if (idx !== null && idx !== undefined) return idx;
