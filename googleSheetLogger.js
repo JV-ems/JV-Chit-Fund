@@ -4,26 +4,9 @@ const http = require('http');
 // =========================================================================
 // GOOGLE SHEET LOGIN ACTIVITY LOG CONFIGURATION
 // 
-// IMPORTANT: Direct spreadsheet links (https://docs.google.com/spreadsheets/d/.../edit)
-// do not accept direct HTTP POST requests from external servers.
-// 
-// To send rows to your Google Sheet:
-// 1. Open your Google Sheet -> Extensions -> Apps Script
-// 2. Paste the following script:
-// 
-//    function doPost(e) {
-//      var data = JSON.parse(e.postData.contents);
-//      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-//      sheet.appendRow([data.date, data.time, data.username, data.ipAddress]);
-//      return ContentService.createTextOutput("Success");
-//    }
-// 
-// 3. Click Deploy -> New deployment -> Select 'Web app'
-// 4. Set 'Execute as': 'Me' & 'Who has access': 'Anyone'
-// 5. Copy the generated Web App URL (https://script.google.com/macros/s/.../exec)
-// 6. Paste the Web App URL below or set process.env.GOOGLE_SHEET_URL
+// Paste your deployed Google Apps Script Web App URL below:
+// Example: "https://script.google.com/macros/s/AKfycbx.../exec"
 // =========================================================================
-
 const GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || "https://docs.google.com/spreadsheets/d/1BVGVfttDPRuquhOFIZnl3G2HVJfEaEsfgI28Ak6iVVw/edit?usp=sharing";
 
 /**
@@ -100,21 +83,28 @@ async function logLoginActivity(req, username) {
     }
 
     if (targetUrl.includes('docs.google.com/spreadsheets')) {
-      console.warn('[GoogleSheetLogger] WARNING: GOOGLE_SHEET_URL is a direct spreadsheet view/edit link (docs.google.com/spreadsheets). Direct POST requests to edit links return 405 error. Please create a Google Apps Script Web App (Extensions -> Apps Script) and paste the Web App Webhook URL (https://script.google.com/macros/s/.../exec) into GOOGLE_SHEET_URL.');
+      console.warn('[GoogleSheetLogger] WARNING: GOOGLE_SHEET_URL is set to docs.google.com spreadsheet edit link instead of Apps Script Web App URL. Direct POST to edit links gives 405 error.');
     }
 
-    // Perform non-blocking asynchronous POST request using global fetch
+    // Use fetch with AbortController timeout so Vercel completes request before freezing context
     if (typeof fetch === 'function') {
-      fetch(targetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        redirect: 'follow'
-      }).then(res => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+
+      try {
+        const res = await fetch(targetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          redirect: 'follow',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         console.log(`[GoogleSheetLogger] Sheet response status: ${res.status}`);
-      }).catch(err => {
-        console.error('[GoogleSheetLogger] Failed to transmit login log to Google Sheet:', err.message);
-      });
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        console.error('[GoogleSheetLogger] Fetch error transmitting to Google Sheet:', fetchErr.message);
+      }
     }
 
     return payload;

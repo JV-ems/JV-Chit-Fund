@@ -111,7 +111,7 @@ async function handleRequest(req, res) {
         }
 
         // Record successful login activity to Google Sheet
-        logLoginActivity(req, user.username || username);
+        await logLoginActivity(req, user.username || username);
 
         return sendJSON(res, 200, {
           success: true,
