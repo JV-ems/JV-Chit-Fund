@@ -7,10 +7,10 @@
   <title>JayanVijayan Chit Fund - Official Digital Portal</title>
   <link rel="icon" type="image/png" href="/assets/logo.png">
 
-  <!-- Google Fonts: Inter -->
+  <!-- Google Fonts: Inter & Noto Sans Tamil for full Tamil character rendering -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Tamil:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
 
   <!-- Custom CSS -->
@@ -21,6 +21,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 
   <!-- SheetJS for Excel Export -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -557,6 +558,13 @@
                 >
                   🟢 Customer Paid List ({user.referral})
                 </button>
+                <button
+                  className={`tabbtn ${currentTab === 'collection_dashboard' ? 'active' : ''}`}
+                  onClick={() => setCurrentTab('collection_dashboard')}
+                  style={{ background: currentTab === 'collection_dashboard' ? '#047857' : '#ffffff', color: currentTab === 'collection_dashboard' ? '#ffffff' : '#047857' }}
+                >
+                  📈 Monthly Collection Dashboard
+                </button>
               </>
             )}
 
@@ -642,6 +650,16 @@
                 config={activeConfig}
                 version={selectedVersion}
                 coreReferrals={coreReferrals}
+              />
+            )}
+
+            {/* 6B. MONTHLY COLLECTION DASHBOARD */}
+            {currentTab === 'collection_dashboard' && user.role === 'admin' && (
+              <MonthlyCollectionDashboardView
+                user={user}
+                configs={configs}
+                selectedVersion={selectedVersion}
+                customers={customers}
               />
             )}
 
@@ -1132,6 +1150,18 @@
         fetchAnalytics();
       }, [selectedPartner, version]);
 
+      const calculateCustomerTotalPaid = (c) => {
+        const cfg = configs[c.version] || configs['JV_1.0'] || configs['JV_3.0'] || {};
+        const sch = (cfg.schemes && cfg.schemes[c.schemeType]) || (cfg.schemes && Object.values(cfg.schemes)[0]) || { basePayable: parseInt(c.schemeType) || 1000 };
+        let paidSum = 0;
+        (c.payments || []).forEach((p, payIdx) => {
+          if (p && p.isPaid) {
+            paidSum += (sch.monthlyPayable && sch.monthlyPayable[payIdx]) || sch.basePayable || 1000;
+          }
+        });
+        return paidSum;
+      };
+
       const partnerTabs = ['Overall', ...coreReferrals];
 
       return (
@@ -1254,7 +1284,7 @@
                           <th>Customer ID</th>
                           <th>Customer Name</th>
                           <th>Version & Plan</th>
-                          <th>Mobile Number</th>
+                          <th>Total Paid</th>
                           <th>Unpaid Months Count</th>
                           <th>Total Pending Due</th>
                         </tr>
@@ -1262,10 +1292,10 @@
                       <tbody>
                         {analytics.pendingCustomers.map(c => (
                           <tr key={c.id}>
-                            <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.mainCustomerId || c.shortCustomerId || c.id}</span></td>
+                            <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.shortCustomerId || c.mainCustomerId || c.id}</span></td>
                             <td style={{ fontWeight: '800', color: '#0b1f3a' }}>👤 {c.name}</td>
                             <td>{c.version} — Rs.{c.schemeType}</td>
-                            <td style={{ fontVariantNumeric: 'tabular-nums' }}><strong>{c.mobile || 'N/A'}</strong></td>
+                            <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: '800', color: '#15803d' }}>Rs. {calculateCustomerTotalPaid(c).toLocaleString('en-IN')}</td>
                             <td style={{ color: '#c2410c', fontWeight: '700' }}>{c.unpaidCount} Months</td>
                             <td style={{ color: '#b91c1c', fontWeight: '900' }}>Rs. {c.totalDue.toLocaleString('en-IN')}</td>
                           </tr>
@@ -1286,7 +1316,7 @@
                         <th>#</th>
                         <th>Customer ID</th>
                         <th>Name</th>
-                        <th>Mobile</th>
+                        <th>Total Paid</th>
                         <th>Version</th>
                         <th>Plan</th>
                         <th>Paid Months</th>
@@ -1297,9 +1327,9 @@
                       {analytics.customers.map((c, i) => (
                         <tr key={c.id}>
                           <td>{i + 1}</td>
-                          <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.mainCustomerId || c.shortCustomerId || c.id}</span></td>
+                          <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.shortCustomerId || c.mainCustomerId || c.id}</span></td>
                           <td style={{ fontWeight: '800', color: '#0b1f3a' }}>{c.name}</td>
-                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>{c.mobile || '-'}</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: '800', color: '#15803d' }}>Rs. {calculateCustomerTotalPaid(c).toLocaleString('en-IN')}</td>
                           <td><span className="version-pill active" style={{ padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>{c.version}</span></td>
                           <td style={{ fontWeight: '700' }}>Rs. {c.schemeType}</td>
                           <td style={{ fontWeight: '700', color: c.paidMonthsCount > 0 ? '#15803d' : '#64748b' }}>
@@ -1322,6 +1352,407 @@
               </div>
             </div>
           )}
+        </div>
+      );
+    }
+
+    function downloadCustomerBalanceSheetPDF(customer, version, config) {
+      if (!customer) return alert("Select a customer first");
+
+      const d = new Date();
+      const options = { timeZone: 'Asia/Kolkata', month: 'numeric' };
+      const formatter = new Intl.DateTimeFormat('en-US', options);
+      const calMonth = parseInt(formatter.format(d), 10);
+      const activeChitMonthIdx = (calMonth - 10 + 12) % 12;
+
+      const cfg = config || (window.CHIT_CONFIGS && window.CHIT_CONFIGS[version]) || {};
+      const scheme = (cfg.schemes && cfg.schemes[customer.schemeType]) || (cfg.schemes && Object.values(cfg.schemes)[0]) || { basePayable: parseInt(customer.schemeType) || 1000 };
+      const months = cfg.months || [
+        { name: 'October' }, { name: 'November' }, { name: 'December' }, { name: 'January' },
+        { name: 'February' }, { name: 'March' }, { name: 'April' }, { name: 'May' },
+        { name: 'June' }, { name: 'July' }, { name: 'August' }, { name: 'September' }
+      ];
+
+      let openingBalance = 0;
+      const monthRows = [];
+      let totalCr = 0;
+      let totalDr = 0;
+
+      for (let m = 0; m <= activeChitMonthIdx; m++) {
+        const mObj = months[m] || { name: `Month ${m + 1}` };
+        const monthNameShort = (mObj.name || '').split(' ')[0].slice(0, 3);
+        const pay = customer.payments && customer.payments[m];
+        const crAmount = (pay && pay.isPaid)
+          ? ((scheme.monthlyPayable && scheme.monthlyPayable[m]) || scheme.basePayable || 1000)
+          : 0;
+
+        let drAmount = 0;
+        if (customer.withdrawal && customer.withdrawal.isWithdrawn) {
+          const wDate = customer.withdrawal.withdrawDate;
+          if (wDate) {
+            const wParts = wDate.split('-');
+            const wCalMonth = parseInt(wParts[1], 10);
+            const wChitIdx = (wCalMonth - 10 + 12) % 12;
+            if (wChitIdx === m) {
+              drAmount = customer.withdrawal.amount || (scheme.received ? scheme.received[0] : 0);
+            }
+          }
+        }
+
+        totalCr += crAmount;
+        totalDr += drAmount;
+        const closingBalance = openingBalance + crAmount - drAmount;
+
+        monthRows.push({
+          monthNameShort,
+          monthNameFull: mObj.name,
+          openingBalance,
+          crAmount,
+          drAmount,
+          closingBalance,
+          isPaid: !!(pay && pay.isPaid)
+        });
+
+        openingBalance = closingBalance;
+      }
+
+      const finalBalance = openingBalance;
+
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.padding = '24px';
+      pdfContainer.style.fontFamily = "'Noto Sans Tamil', 'Inter', sans-serif";
+      pdfContainer.style.color = '#0b1f3a';
+      pdfContainer.style.background = '#ffffff';
+
+      pdfContainer.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #0b1f3a; padding-bottom: 12px;">
+          <div>
+            <h2 style="font-size: 22px; margin: 0; color: #0b1f3a; font-weight: 900;">JayanVijayan Chit Fund</h2>
+            <div style="font-size: 13px; color: #475569; font-weight: 700; margin-top: 4px;">Customer Balance Sheet Statement (${version.replace('_', ' ')})</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
+              Customer: <strong>${customer.name}</strong> | ID: <strong>${customer.shortCustomerId || customer.mainCustomerId || customer.id}</strong> | Plan: <strong>Rs. ${customer.schemeType}</strong>
+            </div>
+          </div>
+          <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; background: #f8fafc; text-align: right; min-width: 220px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="border-bottom: 1px solid #cbd5e1;">
+                  <th style="text-align: left; padding-bottom: 4px;">Name</th>
+                  <th style="text-align: right; padding-bottom: 4px;">Total Cr</th>
+                  <th style="text-align: right; padding-bottom: 4px;">Total Dr</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="font-weight: 800; padding-top: 4px;">${customer.name}</td>
+                  <td style="text-align: right; font-weight: 700; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="text-align: right; font-weight: 700; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+                <tr style="border-top: 1px solid #cbd5e1; font-weight: 900;">
+                  <td style="padding-top: 4px;">Total</td>
+                  <td style="text-align: right; padding-top: 4px; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="text-align: right; padding-top: 4px; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+                <tr style="font-weight: 900;">
+                  <td style="padding-top: 2px;">Balance</td>
+                  <td colspan="2" style="text-align: right; padding-top: 2px; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'};">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1.5px solid #0b1f3a;">
+          <thead>
+            <tr style="background: #0b1f3a; color: #ffffff;">
+              <th style="padding: 8px 10px; text-align: left; width: 80px; border-right: 1px solid #334155;">Months</th>
+              <th style="padding: 8px 10px; text-align: left; border-right: 1px solid #334155;">Names / Details</th>
+              <th style="padding: 8px 10px; text-align: right; width: 110px; border-right: 1px solid #334155;">Cr</th>
+              <th style="padding: 8px 10px; text-align: right; width: 110px;">Dr</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${monthRows.map(row => `
+              <tr style="border-top: 1px solid #cbd5e1;">
+                <td style="padding: 8px 10px; font-weight: 800; border-right: 1px solid #cbd5e1; background: #f1f5f9;">${row.monthNameShort}</td>
+                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">
+                  <span style="font-weight: 800;">${customer.name}</span> (${row.isPaid ? 'Paid' : 'Unpaid'})
+                </td>
+                <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1;">
+                  ${row.crAmount > 0 ? row.crAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                </td>
+                <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #b91c1c;">
+                  ${row.drAmount > 0 ? row.drAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
+                </td>
+              </tr>
+            `).join('')}
+            <tr style="border-top: 2px solid #0b1f3a; background: #f8fafc; font-weight: 900;">
+              <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Total</td>
+              <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Cumulative Payments / Withdrawals</td>
+              <td style="padding: 8px 10px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <td style="padding: 8px 10px; text-align: right; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+            <tr style="background: #f1f5f9; font-weight: 900; font-size: 13px;">
+              <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Balance</td>
+              <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Net Carry-Forward Balance</td>
+              <td colspan="2" style="padding: 8px 10px; text-align: right; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'};">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top: 20px; font-size: 11px; color: #64748b; text-align: center;">
+          Generated automatically on ${new Date().toLocaleDateString('en-IN')} | JayanVijayan Chit Fund Management System
+        </div>
+      `;
+
+      document.body.appendChild(pdfContainer);
+
+      const opt = {
+        margin: 10,
+        filename: `${customer.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_Balance_Sheet.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      if (window.html2pdf) {
+        window.html2pdf().set(opt).from(pdfContainer).save().then(() => {
+          if (pdfContainer.parentNode) document.body.removeChild(pdfContainer);
+        }).catch(e => {
+          console.error(e);
+          if (pdfContainer.parentNode) document.body.removeChild(pdfContainer);
+        });
+      } else {
+        alert("Generating PDF...");
+        if (pdfContainer.parentNode) document.body.removeChild(pdfContainer);
+      }
+    }
+
+    // ==========================================
+    // MONTHLY COLLECTION DASHBOARD (Estimate vs Actual)
+    // ==========================================
+    function MonthlyCollectionDashboardView({ user, configs, selectedVersion, customers }) {
+      const d = new Date();
+      const options = { timeZone: 'Asia/Kolkata', month: 'numeric' };
+      const formatter = new Intl.DateTimeFormat('en-US', options);
+      const calMonth = parseInt(formatter.format(d), 10);
+      const currentChitIdx = (calMonth - 10 + 12) % 12;
+
+      const version = selectedVersion || 'JV_1.0';
+      const config = configs[version] || configs['JV_1.0'] || {};
+      const months = config.months || [];
+      const activeMonthObj = months[currentChitIdx] || { name: `Month ${currentChitIdx + 1}` };
+
+      const partnerRef = user.role === 'admin' && user.username !== 'admin' ? user.referral : null;
+      const filteredCustomers = partnerRef
+        ? customers.filter(c => c.version === version && c.referral === partnerRef)
+        : customers.filter(c => c.version === version);
+
+      let currentEstimatedTotal = 0;
+      let currentActualTotal = 0;
+      const schemeEstimates = {};
+      const schemeActuals = {};
+
+      filteredCustomers.forEach(c => {
+        const scheme = (config.schemes && config.schemes[c.schemeType]) || (config.schemes && Object.values(config.schemes)[0]) || { basePayable: parseInt(c.schemeType) || 1000 };
+        const payable = (scheme.monthlyPayable && scheme.monthlyPayable[currentChitIdx]) || scheme.basePayable || 1000;
+        
+        currentEstimatedTotal += payable;
+        schemeEstimates[c.schemeType] = (schemeEstimates[c.schemeType] || 0) + payable;
+
+        const pay = c.payments && c.payments[currentChitIdx];
+        if (pay && pay.isPaid) {
+          currentActualTotal += payable;
+          schemeActuals[c.schemeType] = (schemeActuals[c.schemeType] || 0) + payable;
+        }
+      });
+
+      let cumulativeCollection = 0;
+      let cumulativeWithdrawal = 0;
+
+      filteredCustomers.forEach(c => {
+        const scheme = (config.schemes && config.schemes[c.schemeType]) || (config.schemes && Object.values(config.schemes)[0]) || { basePayable: parseInt(c.schemeType) || 1000 };
+        (c.payments || []).forEach((pay, mIdx) => {
+          if (mIdx <= currentChitIdx && pay && pay.isPaid) {
+            cumulativeCollection += (scheme.monthlyPayable && scheme.monthlyPayable[mIdx]) || scheme.basePayable || 1000;
+          }
+        });
+
+        if (c.withdrawal && c.withdrawal.isWithdrawn) {
+          const wDate = c.withdrawal.withdrawDate;
+          if (wDate) {
+            const wParts = wDate.split('-');
+            const wCalMonth = parseInt(wParts[1], 10);
+            const wChitIdx = (wCalMonth - 10 + 12) % 12;
+            if (wChitIdx <= currentChitIdx) {
+              cumulativeWithdrawal += c.withdrawal.amount || (scheme.received ? scheme.received[0] : 0);
+            }
+          } else {
+            cumulativeWithdrawal += c.withdrawal.amount || (scheme.received ? scheme.received[0] : 0);
+          }
+        }
+      });
+
+      const historicalMonths = [];
+      for (let m = 0; m < currentChitIdx; m++) {
+        const mObj = months[m] || { name: `Month ${m + 1}` };
+        let mEstimate = 0;
+        let mActual = 0;
+
+        filteredCustomers.forEach(c => {
+          const scheme = (config.schemes && config.schemes[c.schemeType]) || (config.schemes && Object.values(config.schemes)[0]) || { basePayable: parseInt(c.schemeType) || 1000 };
+          const payable = (scheme.monthlyPayable && scheme.monthlyPayable[m]) || scheme.basePayable || 1000;
+          mEstimate += payable;
+
+          const pay = c.payments && c.payments[m];
+          if (pay && pay.isPaid) {
+            mActual += payable;
+          }
+        });
+
+        historicalMonths.push({
+          monthIndex: m,
+          name: mObj.name,
+          estimated: mEstimate,
+          actual: mActual
+        });
+      }
+
+      return (
+        <div className="fade-in">
+          <div className="admin-card" style={{ borderLeft: '6px solid #059669', background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)' }}>
+            <h3 className="admin-title" style={{ color: '#047857' }}>
+              📈 Current Month Collection Dashboard ({activeMonthObj.name} - Month {currentChitIdx + 1})
+            </h3>
+            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '18px' }}>
+              Real-time estimated vs actual collection metrics for the current active chit fund month.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+              <div className="partner-card" style={{ background: '#ffffff', borderColor: '#cbd5e1' }}>
+                <div style={{ fontSize: '12px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase' }}>Estimated Collection</div>
+                <div style={{ fontSize: '26px', fontWeight: '900', color: '#0b1f3a', marginTop: '6px' }}>
+                  Rs. {currentEstimatedTotal.toLocaleString('en-IN')}
+                </div>
+                <small style={{ color: '#64748b' }}>Expected for {activeMonthObj.name}</small>
+              </div>
+
+              <div className="partner-card" style={{ background: '#ffffff', borderColor: '#86efac' }}>
+                <div style={{ fontSize: '12px', fontWeight: '800', color: '#15803d', textTransform: 'uppercase' }}>Actual Collection</div>
+                <div style={{ fontSize: '26px', fontWeight: '900', color: '#15803d', marginTop: '6px' }}>
+                  Rs. {currentActualTotal.toLocaleString('en-IN')}
+                </div>
+                <small style={{ color: '#15803d', fontWeight: '700' }}>
+                  {currentEstimatedTotal > 0 ? `${Math.round((currentActualTotal / currentEstimatedTotal) * 100)}% Collected` : '0% Collected'}
+                </small>
+              </div>
+
+              <div className="partner-card" style={{ background: '#ffffff', borderColor: '#fde68a' }}>
+                <div style={{ fontSize: '12px', fontWeight: '800', color: '#b45309', textTransform: 'uppercase' }}>Estimate vs Actual Gap</div>
+                <div style={{ fontSize: '26px', fontWeight: '900', color: (currentEstimatedTotal - currentActualTotal) > 0 ? '#c2410c' : '#15803d', marginTop: '6px' }}>
+                  Rs. {(currentEstimatedTotal - currentActualTotal).toLocaleString('en-IN')}
+                </div>
+                <small style={{ color: '#64748b' }}>
+                  {(currentEstimatedTotal - currentActualTotal) > 0 ? 'Pending Collection' : 'Fully Collected'}
+                </small>
+              </div>
+            </div>
+
+            <h4 style={{ fontSize: '15px', fontWeight: '800', color: '#0b1f3a', marginBottom: '12px' }}>
+              📋 Scheme / Plan-wise Collection Breakdown ({activeMonthObj.name})
+            </h4>
+            <div style={{ overflowX: 'auto', marginBottom: '24px' }}>
+              <table className="ledger-table" style={{ background: '#ffffff' }}>
+                <thead>
+                  <tr>
+                    <th>Scheme / Plan</th>
+                    <th>Estimated Collection</th>
+                    <th>Actual Collection</th>
+                    <th>Collection Rate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.keys(config.schemes || {}).map(schemeKey => {
+                    const schName = (config.schemes[schemeKey] && config.schemes[schemeKey].name) || `Rs. ${schemeKey} Plan`;
+                    const est = schemeEstimates[schemeKey] || 0;
+                    const act = schemeActuals[schemeKey] || 0;
+                    const pct = est > 0 ? Math.round((act / est) * 100) : 0;
+                    return (
+                      <tr key={schemeKey}>
+                        <td style={{ fontWeight: '800', color: '#0b1f3a' }}>{schName}</td>
+                        <td style={{ fontWeight: '700', color: '#0b1f3a' }}>Rs. {est.toLocaleString('en-IN')}</td>
+                        <td style={{ fontWeight: '800', color: '#15803d' }}>Rs. {act.toLocaleString('en-IN')}</td>
+                        <td>
+                          <span className="version-pill active" style={{ background: pct === 100 ? '#dcfce7' : '#fef3c7', color: pct === 100 ? '#15803d' : '#b45309', padding: '3px 10px' }}>
+                            {pct}%
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="admin-card" style={{ background: '#f8fafc', borderColor: '#e2e8f0', marginBottom: '24px' }}>
+              <h4 style={{ fontSize: '16px', fontWeight: '900', color: '#0b1f3a', marginBottom: '12px' }}>
+                💰 Cumulative Summary (October → {activeMonthObj.name})
+              </h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '700' }}>TOTAL COLLECTION AMOUNT:</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#15803d', marginTop: '4px' }}>
+                    Rs. {cumulativeCollection.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '700' }}>TOTAL WITHDRAW AMOUNT:</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: '#b91c1c', marginTop: '4px' }}>
+                    Rs. {cumulativeWithdrawal.toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', color: '#64748b', fontWeight: '700' }}>NET CASH POSITION:</div>
+                  <div style={{ fontSize: '24px', fontWeight: '900', color: (cumulativeCollection - cumulativeWithdrawal) >= 0 ? '#047857' : '#b91c1c', marginTop: '4px' }}>
+                    Rs. {(cumulativeCollection - cumulativeWithdrawal).toLocaleString('en-IN')}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {historicalMonths.length > 0 && (
+              <div>
+                <h4 style={{ fontSize: '15px', fontWeight: '800', color: '#475569', marginBottom: '12px' }}>
+                  📜 Historical Monthly Collections (Previous Months)
+                </h4>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="ledger-table" style={{ background: '#ffffff' }}>
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th>Estimated Collection</th>
+                        <th>Actual Collection</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historicalMonths.map(h => (
+                        <tr key={h.monthIndex}>
+                          <td style={{ fontWeight: '800', color: '#0b1f3a' }}>{h.name}</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums' }}>Rs. {h.estimated.toLocaleString('en-IN')}</td>
+                          <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: '800', color: '#15803d' }}>Rs. {h.actual.toLocaleString('en-IN')}</td>
+                          <td>
+                            <span style={{ fontSize: '12px', fontWeight: '700', color: h.actual >= h.estimated ? '#15803d' : '#c2410c' }}>
+                              {h.actual >= h.estimated ? '✅ Fully Collected' : `⚠️ Gap: Rs. ${(h.estimated - h.actual).toLocaleString('en-IN')}`}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       );
     }
@@ -1855,6 +2286,18 @@
               >
                 📥 Export My Balance Sheet (Excel)
               </button>
+
+              <button
+                type="button"
+                className="success"
+                onClick={() => {
+                  const dummyPartnerCust = { name: partnerName, id: partnerName, shortCustomerId: partnerName, schemeType: '1000', referral: partnerName, payments: [] };
+                  downloadCustomerBalanceSheetPDF(dummyPartnerCust, version, config);
+                }}
+                style={{ padding: '9px 18px', fontSize: '13px', background: '#0b1f3a', color: '#ffffff' }}
+              >
+                📄 Download Balance Sheet (PDF)
+              </button>
             </div>
           </div>
 
@@ -2344,12 +2787,29 @@
             backgroundColor: "#ffffff",
             windowWidth: 1024, // Consistent desktop-proportioned layout
             onclone: (clonedDoc) => {
+              const fontLink = clonedDoc.createElement('link');
+              fontLink.rel = 'stylesheet';
+              fontLink.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;500;600;700;800;900&display=swap';
+              clonedDoc.head.appendChild(fontLink);
+
               const card = clonedDoc.querySelector('.chit-portrait-card');
               if (card) {
                 card.style.width = "760px";
                 card.style.maxWidth = "760px";
                 card.style.margin = "0 auto";
                 card.style.boxShadow = "none";
+                card.style.outline = "none";
+                card.style.fontFamily = "'Noto Sans Tamil', 'Inter', sans-serif";
+
+                const parent = card.parentElement;
+                if (parent) {
+                  parent.style.padding = "0";
+                  parent.style.margin = "0";
+                  parent.style.border = "none";
+                  parent.style.background = "transparent";
+                  parent.style.boxShadow = "none";
+                  parent.style.outline = "none";
+                }
               }
             }
           });
@@ -2599,7 +3059,7 @@
                 </div>
               </div>
 
-              {/* Action Buttons: High-Res JPG only */}
+              {/* Action Buttons */}
               <div className="passbook-actions-bar">
                 <button
                   className="gold"
@@ -2608,6 +3068,15 @@
                 >
                   <span>📸</span>
                   <span>{isDownloading ? '⏳ Generating Passbook...' : 'Download Passbook (JPG)'}</span>
+                </button>
+
+                <button
+                  className="success"
+                  style={{ background: '#059669', color: '#ffffff' }}
+                  onClick={() => downloadCustomerBalanceSheetPDF(selectedCustomer, version, config)}
+                >
+                  <span>📄</span>
+                  <span>Download Balance Sheet (PDF)</span>
                 </button>
               </div>
             </div>

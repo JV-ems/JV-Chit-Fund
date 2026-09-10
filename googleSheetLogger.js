@@ -49,26 +49,39 @@ function getClientIp(req) {
 }
 
 /**
- * Format current date and time strictly as:
+ * Format current date and time strictly in India Standard Time (IST / Asia/Kolkata):
  * Date: DD-MM-YYYY (e.g. 07-09-2026)
  * Time: hh:mm:ss AM/PM (e.g. 10:30:25 AM)
  */
 function getFormattedDateTime(dateObj = new Date()) {
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const year = dateObj.getFullYear();
-  const dateStr = `${day}-${month}-${year}`;
+  try {
+    const dateOptions = { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const formatterDate = new Intl.DateTimeFormat('en-GB', dateOptions);
+    const parts = formatterDate.formatToParts(dateObj);
+    const day = parts.find(p => p.type === 'day').value;
+    const month = parts.find(p => p.type === 'month').value;
+    const year = parts.find(p => p.type === 'year').value;
+    const dateStr = `${day}-${month}-${year}`;
 
-  let hours = dateObj.getHours();
-  const minutes = String(dateObj.getMinutes()).padStart(2, '0');
-  const seconds = String(dateObj.getSeconds()).padStart(2, '0');
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  const hoursStr = String(hours).padStart(2, '0');
-  const timeStr = `${hoursStr}:${minutes}:${seconds} ${ampm}`;
+    const timeOptions = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+    const formatterTime = new Intl.DateTimeFormat('en-US', timeOptions);
+    const timeStr = formatterTime.format(dateObj);
 
-  return { date: dateStr, time: timeStr };
+    return { date: dateStr, time: timeStr };
+  } catch (e) {
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    let hours = dateObj.getHours();
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    return {
+      date: `${day}-${month}-${year}`,
+      time: `${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`
+    };
+  }
 }
 
 /**

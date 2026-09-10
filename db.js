@@ -96,10 +96,33 @@ const DisbursalSchema = new mongoose.Schema({
   createdAt: { type: String, default: () => new Date().toISOString() }
 }, { timestamps: true });
 
+const BackupLogSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  monthKey: { type: String, required: true, unique: true },
+  sentAt: { type: String, default: () => new Date().toISOString() },
+  recipient: { type: String, default: '' },
+  customerCount: { type: Number, default: 0 }
+}, { timestamps: true });
+
+// Add performance indexes
+CustomerSchema.index({ version: 1, referral: 1 });
+CustomerSchema.index({ mobile: 1 });
+CustomerSchema.index({ id: 1, version: 1 });
+CustomerSchema.index({ shortCustomerId: 1 });
+CustomerSchema.index({ mainCustomerId: 1 });
+
+UserSchema.index({ username: 1 });
+UserSchema.index({ mobile: 1 });
+UserSchema.index({ customerId: 1 });
+
+TransferSchema.index({ version: 1, monthIndex: 1 });
+DisbursalSchema.index({ version: 1, monthIndex: 1 });
+
 const User = mongoose.model('User', UserSchema);
 const Customer = mongoose.model('Customer', CustomerSchema);
 const Transfer = mongoose.model('Transfer', TransferSchema);
 const Disbursal = mongoose.model('Disbursal', DisbursalSchema);
+const BackupLog = mongoose.model('BackupLog', BackupLogSchema);
 
 // Simple secure hash
 function hashPassword(password) {
@@ -698,7 +721,8 @@ const DB = {
         totalOutsideCR: currentStats.outsideCR,
         totalOutsideDR: currentStats.outsideDR,
         count: outsideTransactions.length
-      }
+      },
+      monthlyComputedStats
     };
   },
 
@@ -706,12 +730,13 @@ const DB = {
   async getPartnerMonthlyBreakdown(partnerName = 'PLSSV', targetVersion = 'JV_1.0') {
     const config = CHIT_CONFIGS[targetVersion] || CHIT_CONFIGS['JV_1.0'] || {};
     const months = config.months || [];
-    const monthlyList = [];
+    const lastIdx = Math.max(0, months.length - 1);
+    const fullSummary = await this.getAccountsSummary(targetVersion, lastIdx);
+    const monthlyStats = fullSummary.monthlyComputedStats || [];
 
-    for (let idx = 0; idx < months.length; idx++) {
-      const mObj = months[idx];
-      const summary = await this.getAccountsSummary(targetVersion, idx);
-      const pBal = (summary.partnerBalances || []).find(p => p.referral === partnerName) || {
+    const monthlyList = months.map((mObj, idx) => {
+      const mStat = monthlyStats[idx] || {};
+      const pBal = (mStat.partnerStats && mStat.partnerStats[partnerName]) || {
         openingBalance: 0,
         collectionsCR: 0,
         transfersIn: 0,
@@ -723,7 +748,7 @@ const DB = {
         closingBalance: 0
       };
 
-      monthlyList.push({
+      return {
         monthIndex: idx,
         monthName: mObj.name || `Month ${idx + 1}`,
         tamilName: mObj.tamilName || '',
@@ -738,17 +763,16 @@ const DB = {
         totalOutflow: pBal.disbursalsDR + pBal.transfersOut,
         netCurrent: pBal.netCurrent,
         closingBalance: pBal.closingBalance
-      });
-    }
+      };
+    });
 
-    const versionTotals = [];
-    for (const v of ['JV_1.0', 'JV_2.0', 'JV_3.0']) {
+    const versionTotals = (await Promise.all(['JV_1.0', 'JV_2.0', 'JV_3.0'].map(async (v) => {
       const vConfig = CHIT_CONFIGS[v] || {};
       const lastMonthIdx = Math.max(0, (vConfig.months || []).length - 1);
       const vSummary = await this.getAccountsSummary(v, lastMonthIdx);
       const p = (vSummary.partnerBalances || []).find(x => x.referral === partnerName);
       if (p) {
-        versionTotals.push({
+        return {
           version: v,
           collectionsCR: p.collectionsCR,
           transfersIn: p.transfersIn,
@@ -757,9 +781,10 @@ const DB = {
           transfersOut: p.transfersOut,
           outsideDR: p.outsideDR,
           closingBalance: p.closingBalance
-        });
+        };
       }
-    }
+      return null;
+    }))).filter(Boolean);
 
     return {
       partner: partnerName,
@@ -767,6 +792,31 @@ const DB = {
       monthlyBreakdown: monthlyList,
       versionBreakdown: versionTotals
     };
+  },
+
+  // Backup Log Deduplication Helpers
+  async isBackupSent(monthKey) {
+    try {
+      const log = await BackupLog.findOne({ monthKey }).lean();
+      return !!log;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  async recordBackupSent(monthKey, recipient = '', customerCount = 0) {
+    try {
+      const id = `BACKUP_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+      await BackupLog.updateOne(
+        { monthKey },
+        { $set: { id, monthKey, recipient, customerCount, sentAt: new Date().toISOString() } },
+        { upsert: true }
+      );
+      return true;
+    } catch (e) {
+      console.error('Error recording backup sent log:', e);
+      return false;
+    }
   },
 
   // Master Accounts Summary: Consolidated across all partners & versions

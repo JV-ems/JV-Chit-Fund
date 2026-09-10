@@ -371,6 +371,14 @@ async function handleRequest(req, res) {
         return sendJSON(res, 200, { success: true, summary });
       }
 
+      // 11. Vercel Cron / Scheduled Monthly Backup Endpoint
+      if ((pathname === '/api/cron/monthly-backup' || pathname === '/api/admin/trigger-backup') && (method === 'GET' || method === 'POST')) {
+        const { processMonthlyBackupEmail } = require('./monthlyBackup');
+        const force = parsedUrl.query.force === 'true';
+        const result = await processMonthlyBackupEmail(force);
+        return sendJSON(res, 200, { success: true, result });
+      }
+
       return sendJSON(res, 404, { success: false, message: 'API endpoint not found' });
     } catch (err) {
       console.error('API Error:', err);
