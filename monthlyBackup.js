@@ -1,5 +1,7 @@
 const DB = require('./db');
-const { CHIT_CONFIGS } = require('./chitConfig');
+const { CHIT_CONFIGS, CORE_REFERRALS } = require('./chitConfig');
+const { getCustomerEmail, CUSTOMER_EMAIL_MAP } = require('./customerEmailConfig');
+const { generateCustomerBalanceSheetPDF } = require('./pdfGenerator');
 
 /**
  * Get current chit fund month key and index based on IST date.
@@ -113,11 +115,11 @@ async function generatePersonWiseBackupData() {
 
 /**
  * Execute automatic monthly backup and email transmission.
- * Deduplicated via DB.isBackupSent check.
+ * Generates individual balance sheet PDFs per customer and sends separate emails ONLY
+ * to customers with a configured email address.
  */
 async function processMonthlyBackupEmail(force = false) {
   const monthInfo = getCurrentChitFundMonthInfo();
-  const recipient = process.env.BACKUP_EMAIL_RECIPIENT || process.env.ADMIN_EMAIL || 'admin-backup-placeholder@jvchitfund.com';
 
   if (!force) {
     const alreadySent = await DB.isBackupSent(monthInfo.monthKey);
@@ -130,54 +132,106 @@ async function processMonthlyBackupEmail(force = false) {
   const report = await generatePersonWiseBackupData();
   console.log(`[MonthlyBackup] Compiled balance sheet backup for ${report.totalCustomers} customers (${monthInfo.monthName} ${monthInfo.year})`);
 
-  let emailSentSuccess = false;
+  const results = [];
+  const senderEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'jvchitfund@gmail.com';
 
-  // Transmit email if SMTP environment variables are configured
+  // Setup nodemailer transporter if SMTP credentials exist
+  let transporter = null;
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-    try {
-      const nodemailer = require('nodemailer');
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587', 10),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
-
-      const bodyText = `JayanVijayan Chit Fund - Person-wise Balance Sheet Backup\n` +
-        `Month: ${monthInfo.monthName} ${monthInfo.year} (${monthInfo.monthKey})\n` +
-        `Total Customers: ${report.totalCustomers}\n\n` +
-        JSON.stringify(report.customerBackups, null, 2);
-
-      await transporter.sendMail({
-        from: `"JV Chit Fund Backup" <${process.env.SMTP_USER}>`,
-        to: recipient,
-        subject: `[JV Chit Fund] Monthly Balance Sheet Backup - ${monthInfo.monthName} ${monthInfo.year}`,
-        text: bodyText
-      });
-
-      emailSentSuccess = true;
-      console.log(`[MonthlyBackup] Email sent successfully to ${recipient}`);
-    } catch (err) {
-      console.error('[MonthlyBackup] SMTP email sending failed:', err.message);
-    }
-  } else {
-    console.warn(`[MonthlyBackup] SMTP environment variables (SMTP_HOST, SMTP_USER, SMTP_PASS) not configured.`);
-    console.warn(`[MonthlyBackup] Configured backup email placeholder: '${recipient}'.`);
+    const nodemailer = require('nodemailer');
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS
+      }
+    });
   }
 
-  // Record log entry to prevent duplicate emails for this month
-  await DB.recordBackupSent(monthInfo.monthKey, recipient, report.totalCustomers);
+  // Identify all unique persons/customers
+  const allPersonKeys = Array.from(new Set([
+    ...CORE_REFERRALS,
+    ...Object.keys(CUSTOMER_EMAIL_MAP)
+  ]));
+
+  for (const personKey of allPersonKeys) {
+    const toEmail = getCustomerEmail(personKey);
+
+    // Filter customer account records for this specific person/referral only
+    const personAccounts = report.customerBackups.filter(c => 
+      c.referral === personKey || 
+      c.name === personKey || 
+      (c.name && c.name.toLowerCase().includes(personKey.toLowerCase()))
+    );
+
+    if (!toEmail) {
+      console.log(`[MonthlyBackup] Customer '${personKey}' has no configured email address. Backup generated; email skipped.`);
+      results.push({ person: personKey, emailSent: false, reason: 'No email configured' });
+      continue;
+    }
+
+    try {
+      // 1. Generate individual balance sheet PDF for this customer ONLY
+      const pdfBuffer = await generateCustomerBalanceSheetPDF({
+        name: personKey,
+        email: toEmail,
+        monthInfo,
+        accounts: personAccounts
+      });
+
+      const pdfFilename = `${personKey}_Balance_Sheet_${monthInfo.monthName}_${monthInfo.year}.pdf`;
+      const subject = `JV Chit Fund - Monthly Balance Sheet - ${personKey} - ${monthInfo.monthName} ${monthInfo.year}`;
+      const bodyText = `Dear ${personKey},\n\n` +
+        `Please find attached your individual monthly balance sheet report for ${monthInfo.monthName} ${monthInfo.year}.\n\n` +
+        `Summary Details:\n` +
+        `- Month: ${monthInfo.monthName} ${monthInfo.year} (${monthInfo.monthKey})\n` +
+        `- Customer / Partner Name: ${personKey}\n` +
+        `- Total Subscriptions/Accounts: ${personAccounts.length}\n\n` +
+        `This is an automated confidential backup email containing ONLY your balance sheet.\n\n` +
+        `Best regards,\n` +
+        `JV Chit Fund Management\n` +
+        `jvchitfund@gmail.com`;
+
+      if (transporter) {
+        await transporter.sendMail({
+          from: `"JV Chit Fund" <${senderEmail}>`,
+          to: toEmail,
+          subject: subject,
+          text: bodyText,
+          attachments: [
+            {
+              filename: pdfFilename,
+              content: pdfBuffer,
+              contentType: 'application/pdf'
+            }
+          ]
+        });
+        console.log(`[MonthlyBackup] Successfully sent separate balance sheet PDF email to ${personKey} <${toEmail}>`);
+        results.push({ person: personKey, email: toEmail, pdfFilename, pdfSize: pdfBuffer.length, emailSent: true });
+      } else {
+        console.warn(`[MonthlyBackup] SMTP credentials not set. Compiled PDF (${pdfFilename}, ${pdfBuffer.length} bytes) for ${personKey} <${toEmail}> but skipped sending.`);
+        results.push({ person: personKey, email: toEmail, pdfFilename, pdfSize: pdfBuffer.length, emailSent: false, reason: 'SMTP credentials not configured' });
+      }
+    } catch (err) {
+      console.error(`[MonthlyBackup] Failed to send balance sheet email to ${personKey} <${toEmail}>:`, err.message);
+      results.push({ person: personKey, email: toEmail, emailSent: false, error: err.message });
+    }
+  }
+
+  // Record log entry
+  const sentCount = results.filter(r => r.emailSent).length;
+  const recipientSummary = results.map(r => `${r.person}:${r.email || 'N/A'}`).join(', ');
+  await DB.recordBackupSent(monthInfo.monthKey, recipientSummary, report.totalCustomers);
 
   return {
     success: true,
     monthKey: monthInfo.monthKey,
     monthName: monthInfo.monthName,
-    recipient,
-    customerCount: report.totalCustomers,
-    emailSent: emailSentSuccess
+    results,
+    totalCustomers: report.totalCustomers,
+    sentCount
   };
 }
 

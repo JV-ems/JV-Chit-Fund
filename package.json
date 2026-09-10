@@ -12,6 +12,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "mongoose": "^9.9.5"
+    "mongoose": "^9.9.5",
+    "nodemailer": "^6.9.16",
+    "pdfkit": "^0.15.2"
   }
 }
+
