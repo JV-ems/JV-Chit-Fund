@@ -379,6 +379,15 @@ async function handleRequest(req, res) {
         return sendJSON(res, 200, { success: true, result });
       }
 
+      // 11B. Temporary Daily Test Backup Endpoint (Easy to disable/remove via config)
+      if ((pathname === '/api/cron/daily-test-backup' || pathname === '/api/admin/trigger-daily-test-backup') && (method === 'GET' || method === 'POST')) {
+        const { processDailyTestBackupEmail } = require('./monthlyBackup');
+        const force = parsedUrl.query.force !== 'false';
+        const result = await processDailyTestBackupEmail(force);
+        return sendJSON(res, 200, { success: true, isDailyTest: true, result });
+      }
+
+
       return sendJSON(res, 404, { success: false, message: 'API endpoint not found' });
     } catch (err) {
       console.error('API Error:', err);

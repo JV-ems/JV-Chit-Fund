@@ -235,8 +235,26 @@ async function processMonthlyBackupEmail(force = false) {
   };
 }
 
+/**
+ * Execute temporary DAILY TEST backup email transmission.
+ * Runs on a daily schedule solely for testing email delivery.
+ * Keeps production monthly backup logic completely intact.
+ */
+async function processDailyTestBackupEmail(force = true) {
+  const { ENABLE_DAILY_TEST_SCHEDULE } = require('./customerEmailConfig');
+  if (!ENABLE_DAILY_TEST_SCHEDULE && !force) {
+    console.log('[DailyTestBackup] Daily test schedule is disabled in config. Skipping.');
+    return { success: false, disabled: true, message: 'Daily test schedule disabled in config' };
+  }
+
+  console.log('[DailyTestBackup] Initiating daily test email transmission...');
+  return processMonthlyBackupEmail(true);
+}
+
 module.exports = {
   getCurrentChitFundMonthInfo,
   generatePersonWiseBackupData,
-  processMonthlyBackupEmail
+  processMonthlyBackupEmail,
+  processDailyTestBackupEmail
 };
+

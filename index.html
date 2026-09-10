@@ -3069,16 +3069,8 @@
                   <span>📸</span>
                   <span>{isDownloading ? '⏳ Generating Passbook...' : 'Download Passbook (JPG)'}</span>
                 </button>
-
-                <button
-                  className="success"
-                  style={{ background: '#059669', color: '#ffffff' }}
-                  onClick={() => downloadCustomerBalanceSheetPDF(selectedCustomer, version, config)}
-                >
-                  <span>📄</span>
-                  <span>Download Balance Sheet (PDF)</span>
-                </button>
               </div>
+
             </div>
           )}
         </div>
@@ -3604,22 +3596,79 @@
         <div className="fade-in">
           <div style={{ textAlign: 'center', marginBottom: '22px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#0b1f3a' }}>
-              📊 {config.title || 'JayanVijayan Chit Fund'} — {version} Report
+              📊 {config.title || 'JayanVijayan Chit Fund'} — {version.replace('_', ' ')} Scheme Report
             </h2>
             <div style={{ display: 'flex', justifyContent: 'center', gap: '18px', marginTop: '14px', flexWrap: 'wrap' }}>
-              <div style={{ background: '#dcfce7', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#15803d', fontSize: '16px' }}>
+              <div style={{ background: '#dcfce7', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#15803d', fontSize: '15px', border: '1px solid #bbf7d0' }}>
                 💰 Total Collections: Rs. {totalOverallCollection.toLocaleString('en-IN')}
               </div>
-              <div style={{ background: '#fee2e2', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#b91c1c', fontSize: '16px' }}>
+              <div style={{ background: '#fee2e2', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#b91c1c', fontSize: '15px', border: '1px solid #fecaca' }}>
                 🎉 Total Withdrawals: {reportData.totalWithdrawals} Members
               </div>
-              <div style={{ background: '#e0f2fe', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#0369a1', fontSize: '16px' }}>
+              <div style={{ background: '#e0f2fe', padding: '10px 22px', borderRadius: '12px', fontWeight: '800', color: '#0369a1', fontSize: '15px', border: '1px solid #bae6fd' }}>
                 👥 Total Members: {reportData.totalCustomers}
               </div>
             </div>
           </div>
 
-          <div className="passbook-table-container">
+          {/* SCHEME / PLAN BREAKDOWN CARDS GRID */}
+          <div style={{ marginBottom: '28px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0b1f3a', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>📋</span>
+              <span>Chit Schemes & Plan Structure ({version.replace('_', ' ')})</span>
+            </h3>
+            
+            <div className="scheme-cards-grid">
+              {config.schemes && Object.entries(config.schemes).map(([schemeKey, schemeObj]) => {
+                const monthlyPayableArr = schemeObj.monthlyPayable || [schemeObj.basePayable || 1000];
+                const receivedArr = schemeObj.received || [];
+                const minPayable = Math.min(...monthlyPayableArr);
+                const maxPayable = Math.max(...monthlyPayableArr);
+                const minReceived = receivedArr.length > 0 ? Math.min(...receivedArr) : 0;
+                const maxReceived = receivedArr.length > 0 ? Math.max(...receivedArr) : 0;
+
+                return (
+                  <div key={schemeKey} className="scheme-card">
+                    <div className="scheme-card-header">
+                      <div className="scheme-card-title">{schemeObj.name || `Rs. ${schemeKey} Plan`}</div>
+                      <div className="scheme-badge">12 Installments</div>
+                    </div>
+                    
+                    <div className="scheme-card-body">
+                      <div className="scheme-info-row">
+                        <span className="scheme-label">Base Monthly Pay:</span>
+                        <span className="scheme-val highlight">Rs. {Number(schemeObj.basePayable || schemeKey).toLocaleString('en-IN')}</span>
+                      </div>
+                      
+                      <div className="scheme-info-row">
+                        <span className="scheme-label">Monthly Payable Range:</span>
+                        <span className="scheme-val">Rs. {minPayable.toLocaleString('en-IN')} - Rs. {maxPayable.toLocaleString('en-IN')}</span>
+                      </div>
+
+                      <div className="scheme-info-row">
+                        <span className="scheme-label">Auction Payout Range:</span>
+                        <span className="scheme-val payout">
+                          {minReceived > 0 ? `Rs. ${minReceived.toLocaleString('en-IN')} - Rs. ${maxReceived.toLocaleString('en-IN')}` : '-'}
+                        </span>
+                      </div>
+
+                      <div className="scheme-info-row">
+                        <span className="scheme-label">Duration:</span>
+                        <span className="scheme-val">12 Months Cycle</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#0b1f3a', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>📈</span>
+            <span>Monthly Collections & Referral Breakdown</span>
+          </h3>
+
+          <div className="passbook-table-container" style={{ overflowX: 'auto' }}>
             <table className="passbook-table">
               <thead>
                 <tr>
@@ -3660,6 +3709,7 @@
           </div>
         </div>
       );
+
     }
 
     // ==========================================

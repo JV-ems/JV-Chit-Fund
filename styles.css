@@ -1378,6 +1378,107 @@ html, body {
   }
 }
 
+/* ==========================================
+   SCHEME REPORT CARD GRID & ALIGNMENT STYLES
+   ========================================== */
+.scheme-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.scheme-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 20px;
+  box-shadow: 0 4px 14px rgba(9, 30, 58, 0.05);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.scheme-card:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+  box-shadow: 0 8px 22px rgba(9, 30, 58, 0.09);
+}
+
+.scheme-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1.5px solid #f1f5f9;
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.scheme-card-title {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--royal-navy);
+  white-space: nowrap;
+}
+
+.scheme-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 800;
+  border: 1px solid #bae6fd;
+  white-space: nowrap;
+}
+
+.scheme-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scheme-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.scheme-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.scheme-val {
+  font-weight: 800;
+  color: var(--royal-navy);
+  text-align: right;
+}
+
+.scheme-val.highlight {
+  color: #059669;
+  font-size: 15px;
+}
+
+.scheme-val.payout {
+  color: #b45309;
+}
+
+@media (max-width: 768px) {
+  .scheme-cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .scheme-card {
+    padding: 14px !important;
+  }
+}
+
+
 
 
 

@@ -36,7 +36,16 @@ function getCustomerEmail(identifier) {
   return null;
 }
 
+/**
+ * Configuration toggle for temporary daily email test schedule.
+ * Set to false or change config to disable temporary daily test emails.
+ * Does NOT affect the production monthly backup routine.
+ */
+const ENABLE_DAILY_TEST_SCHEDULE = true;
+
 module.exports = {
   CUSTOMER_EMAIL_MAP,
-  getCustomerEmail
+  getCustomerEmail,
+  ENABLE_DAILY_TEST_SCHEDULE
 };
+
