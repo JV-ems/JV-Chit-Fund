@@ -292,7 +292,7 @@ select:focus, input:focus {
   z-index: 1;
 }
 
-/* Reliable inner decorative border (renders 100% cleanly in html2canvas) */
+/* Reliable inner decorative border (renders 100% cleanly in html2canvas)
 .chit-portrait-card::before {
   content: '';
   position: absolute;
@@ -304,7 +304,7 @@ select:focus, input:focus {
   border-radius: 10px;
   pointer-events: none;
   z-index: 1;
-}
+} */
 
 /* High-Definition Centered Watermark Logo (Pure Opacity, No Canvas-Breaking Filters) */
 .passbook-big-watermark {

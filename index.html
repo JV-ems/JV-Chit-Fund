@@ -363,6 +363,23 @@
             }
           })
           .catch(e => console.log("Using local config matrix"));
+
+        // If logged-in user session exists in localStorage (page refresh / tab reopen), log to Google Sheet
+        try {
+          const savedUserStr = localStorage.getItem('jv_logged_user');
+          if (savedUserStr) {
+            const savedUser = JSON.parse(savedUserStr);
+            if (savedUser && (savedUser.username || savedUser.mobile)) {
+              fetch('/api/auth/log-session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: savedUser.username || savedUser.mobile })
+              }).catch(e => console.error("Session log error", e));
+            }
+          }
+        } catch (err) {
+          console.error("Error reading saved session for logger", err);
+        }
       }, []);
 
       const loadCustomers = async () => {

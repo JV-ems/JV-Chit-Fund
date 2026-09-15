@@ -120,6 +120,16 @@ async function handleRequest(req, res) {
         });
       }
 
+      // Log Session Restore / Page Refresh activity to Google Sheet
+      if (pathname === '/api/auth/log-session' && method === 'POST') {
+        const body = await parseBody(req);
+        const { username } = body;
+        if (username) {
+          await logLoginActivity(req, username);
+        }
+        return sendJSON(res, 200, { success: true });
+      }
+
       // Change Password
       if (pathname === '/api/auth/change-password' && method === 'POST') {
         const body = await parseBody(req);
