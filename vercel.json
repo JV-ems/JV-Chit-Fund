@@ -4,12 +4,7 @@
     {
       "path": "/api/cron/monthly-backup",
       "schedule": "0 0 1 * *"
-    },
-    {
-      "path": "/api/cron/daily-test-backup",
-      "schedule": "0 9 * * *"
     }
-
   ],
   "routes": [
     {
