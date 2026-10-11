@@ -1164,6 +1164,7 @@
     // ==========================================
     function MasterPartnerInspectorView({ configs, coreReferrals, version }) {
       const [selectedPartner, setSelectedPartner] = useState('Overall');
+      const [selectedPlan, setSelectedPlan] = useState('All');
       const [analytics, setAnalytics] = useState(null);
       const [isLoading, setIsLoading] = useState(true);
 
@@ -1195,6 +1196,10 @@
         fetchAnalytics();
       }, [selectedPartner, version]);
 
+      useEffect(() => {
+        setSelectedPlan('All');
+      }, [selectedPartner]);
+
       const calculateCustomerTotalPaid = (c) => {
         const cfg = configs[c.version] || configs['JV_1.0'] || configs['JV_3.0'] || {};
         const sch = (cfg.schemes && cfg.schemes[c.schemeType]) || (cfg.schemes && Object.values(cfg.schemes)[0]) || { basePayable: parseInt(c.schemeType) || 1000 };
@@ -1210,6 +1215,7 @@
       const partnerTabs = ['Overall', ...coreReferrals];
 
       let dynamicPendingCustomers = [];
+      let dynamicPaidCustomers = [];
       if (analytics && analytics.customers) {
         analytics.customers.forEach(c => {
           const currentMonthIndex = getCurrentSchemeMonthIndex(c.version || 'JV_1.0');
@@ -1239,11 +1245,21 @@
               oldestPendingMonthName,
               totalRelevantDue
             });
+          } else {
+            dynamicPaidCustomers.push(c);
           }
         });
 
         dynamicPendingCustomers.sort((a, b) => a.oldestPendingMonthIndex - b.oldestPendingMonthIndex);
       }
+
+      const filteredPendingCustomers = selectedPlan === 'All'
+        ? dynamicPendingCustomers
+        : dynamicPendingCustomers.filter(c => String(c.schemeType) === String(selectedPlan));
+
+      const filteredPaidCustomers = selectedPlan === 'All'
+        ? dynamicPaidCustomers
+        : dynamicPaidCustomers.filter(c => String(c.schemeType) === String(selectedPlan));
 
       return (
         <div className="fade-in">
@@ -1310,20 +1326,71 @@
               {/* Dynamic Scheme-wise Customer Counts */}
               {analytics.customers && analytics.customers.length > 0 && (() => {
                 const { total, schemeCounts } = getCustomerCountsByScheme(analytics.customers);
+                const isTotalActive = selectedPlan === 'All';
                 return (
                   <div className="admin-card" style={{ background: '#f8fafc', border: '1.5px solid #cbd5e1', marginBottom: '22px' }}>
-                    <h3 className="admin-title" style={{ fontSize: '15px' }}>📊 Customer Counts ({selectedPartner})</h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <h3 className="admin-title" style={{ fontSize: '15px', margin: 0 }}>📊 Customer Counts ({selectedPartner})</h3>
+                      {selectedPlan !== 'All' && (
+                        <span style={{ fontSize: '12px', background: '#dbeafe', color: '#1e40af', padding: '3px 10px', borderRadius: '12px', fontWeight: '800' }}>
+                          Filtered by: Rs. {selectedPlan} Plan
+                        </span>
+                      )}
+                    </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', marginTop: '10px' }}>
-                      <div style={{ background: '#0b1f3a', color: '#fff', padding: '10px 16px', borderRadius: '8px' }}>
-                        <span style={{ fontSize: '11px', textTransform: 'uppercase' }}>Total Members: </span>
-                        <strong style={{ color: '#fef08a', fontSize: '18px', marginLeft: '6px' }}>{total}</strong>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedPlan('All')}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPlan('All'); } }}
+                        title="Click to view all customers across all plans"
+                        style={{
+                          background: isTotalActive ? '#0b1f3a' : '#ffffff',
+                          color: isTotalActive ? '#ffffff' : '#0b1f3a',
+                          padding: '10px 16px',
+                          borderRadius: '8px',
+                          border: isTotalActive ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          boxShadow: isTotalActive ? '0 0 0 3px rgba(37, 99, 235, 0.25)' : 'none',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          userSelect: 'none',
+                          display: 'inline-flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ fontSize: '11px', textTransform: 'uppercase', color: isTotalActive ? '#cbd5e1' : '#64748b', fontWeight: '700' }}>Total Members: </span>
+                        <strong style={{ color: isTotalActive ? '#fef08a' : '#0b1f3a', fontSize: '18px', marginLeft: '6px' }}>{total}</strong>
                       </div>
-                      {Object.entries(schemeCounts).map(([planName, count]) => (
-                        <div key={planName} style={{ background: '#fff', border: '1px solid #cbd5e1', padding: '10px 16px', borderRadius: '8px' }}>
-                          <span style={{ fontSize: '11px', color: '#475569', fontWeight: '700' }}>{planName}: </span>
-                          <strong style={{ color: '#0b1f3a', fontSize: '18px', marginLeft: '6px' }}>{count}</strong>
-                        </div>
-                      ))}
+                      {Object.entries(schemeCounts).map(([planName, count]) => {
+                        const planKey = planName.replace(/[^0-9]/g, '');
+                        const isPlanActive = selectedPlan === planKey;
+                        return (
+                          <div
+                            key={planName}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => setSelectedPlan(planKey)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPlan(planKey); } }}
+                            title={`Click to filter by ${planName}`}
+                            style={{
+                              background: isPlanActive ? '#0b1f3a' : '#ffffff',
+                              color: isPlanActive ? '#ffffff' : '#0b1f3a',
+                              border: isPlanActive ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                              boxShadow: isPlanActive ? '0 0 0 3px rgba(37, 99, 235, 0.25)' : 'none',
+                              padding: '10px 16px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              userSelect: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span style={{ fontSize: '11px', color: isPlanActive ? '#cbd5e1' : '#475569', fontWeight: '700' }}>{planName}: </span>
+                            <strong style={{ color: isPlanActive ? '#fef08a' : '#0b1f3a', fontSize: '18px', marginLeft: '6px' }}>{count}</strong>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -1352,16 +1419,34 @@
                 </div>
               )}
 
-              {/* ⚠️ Pending Collections Alert Box */}
-              {dynamicPendingCustomers.length > 0 && (
-                <div className="admin-card" style={{ background: '#fff7ed', borderColor: '#fed7aa' }}>
-                  <h3 style={{ color: '#c2410c', fontWeight: '900', fontSize: '18px', marginBottom: '12px' }}>
-                    ⚠️ Pending Collections ({dynamicPendingCustomers.length} Members Have Unpaid Installments)
+              {/* SECTION 1: UNPAID / PENDING CUSTOMERS LIST */}
+              <div className="admin-card" style={{ background: '#fff7ed', borderColor: '#fed7aa', borderLeft: '4px solid #dc2626' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                  <h3 style={{ margin: 0, color: '#c2410c', fontWeight: '900', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>🔴</span>
+                    <span>Pending / Unpaid Customers ({filteredPendingCustomers.length}{selectedPlan !== 'All' ? ` — Rs. ${selectedPlan} Plan` : ''})</span>
                   </h3>
+                  {selectedPlan !== 'All' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan('All')}
+                      style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '6px', background: '#ffffff', border: '1px solid #fed7aa', color: '#c2410c', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      ✕ Reset to All Plans
+                    </button>
+                  )}
+                </div>
+
+                {filteredPendingCustomers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#15803d', background: '#f0fdf4', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}>
+                    🎉 Great! All members {selectedPlan !== 'All' ? `in Rs. ${selectedPlan} Plan` : ''} have recorded payments.
+                  </div>
+                ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table className="ledger-table" style={{ background: '#ffffff' }}>
                       <thead>
                         <tr>
+                          <th>#</th>
                           <th>Customer ID</th>
                           <th>Customer Name</th>
                           <th>Version & Plan</th>
@@ -1371,8 +1456,9 @@
                         </tr>
                       </thead>
                       <tbody>
-                        {dynamicPendingCustomers.map(c => (
+                        {filteredPendingCustomers.map((c, i) => (
                           <tr key={c.id}>
+                            <td>{i + 1}</td>
                             <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.shortCustomerId || c.mainCustomerId || c.id}</span></td>
                             <td style={{ fontWeight: '800', color: '#0b1f3a' }}>👤 {c.name}</td>
                             <td>{c.version} — Rs.{c.schemeType}</td>
@@ -1386,52 +1472,75 @@
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              {/* Full Customers List */}
-              <div className="admin-card">
-                <h3 className="admin-title">👥 All Customer Profiles under {selectedPartner}</h3>
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="ledger-table">
-                    <thead>
-                      <tr>
-                        <th>#</th>
-                        <th>Customer ID</th>
-                        <th>Name</th>
-                        <th>Total Paid</th>
-                        <th>Version</th>
-                        <th>Plan</th>
-                        <th>Paid Months</th>
-                        <th>Auction Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {analytics.customers.map((c, i) => (
-                        <tr key={c.id}>
-                          <td>{i + 1}</td>
-                          <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.shortCustomerId || c.mainCustomerId || c.id}</span></td>
-                          <td style={{ fontWeight: '800', color: '#0b1f3a' }}>{c.name}</td>
-                          <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: '800', color: '#15803d' }}>Rs. {calculateCustomerTotalPaid(c).toLocaleString('en-IN')}</td>
-                          <td><span className="version-pill active" style={{ padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>{c.version}</span></td>
-                          <td style={{ fontWeight: '700' }}>Rs. {c.schemeType}</td>
-                          <td style={{ fontWeight: '700', color: c.paidMonthsCount > 0 ? '#15803d' : '#64748b' }}>
-                            {c.paidMonthsCount} / {c.totalMonths} Paid
-                          </td>
-                          <td>
-                            {c.withdrawal && c.withdrawal.isWithdrawn ? (
-                              <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '4px 10px', borderRadius: '12px', fontWeight: '800', fontSize: '12px' }}>
-                                🎉 Withdrawn ({c.withdrawal.withdrawDate})
-                              </span>
-                            ) : (
-                              <span style={{ color: '#94a3b8', fontSize: '12px' }}>Active</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              {/* SECTION 2: PAID CUSTOMERS LIST */}
+              <div className="admin-card" style={{ borderLeft: '4px solid #16a34a' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                  <h3 className="admin-title" style={{ margin: 0, fontSize: '16px', color: '#15803d', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>🟢</span>
+                    <span>Paid Customers ({filteredPaidCustomers.length}{selectedPlan !== 'All' ? ` — Rs. ${selectedPlan} Plan` : ''})</span>
+                  </h3>
+                  {selectedPlan !== 'All' && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan('All')}
+                      style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '6px', background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#0b1f3a', cursor: 'pointer', fontWeight: '700' }}
+                    >
+                      ✕ Reset to All Plans
+                    </button>
+                  )}
                 </div>
+
+                {filteredPaidCustomers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px', color: '#64748b', background: '#f8fafc', borderRadius: '8px', fontSize: '13px' }}>
+                    No paid customers found {selectedPlan !== 'All' ? `for Rs. ${selectedPlan} Plan` : ''}.
+                  </div>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="ledger-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Customer ID</th>
+                          <th>Customer Name</th>
+                          <th>Version</th>
+                          <th>Plan</th>
+                          <th>Total Paid</th>
+                          <th>Paid Months</th>
+                          <th>Referral</th>
+                          <th>Auction Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredPaidCustomers.map((c, i) => (
+                          <tr key={c.id}>
+                            <td>{i + 1}</td>
+                            <td><span style={{ fontFamily: 'monospace', fontWeight: '800', color: '#0b1f3a', fontSize: '11px', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{c.shortCustomerId || c.mainCustomerId || c.id}</span></td>
+                            <td style={{ fontWeight: '800', color: '#0b1f3a' }}>👤 {c.name}</td>
+                            <td><span className="version-pill active" style={{ padding: '3px 10px', fontSize: '11px', whiteSpace: 'nowrap' }}>{c.version}</span></td>
+                            <td style={{ fontWeight: '700' }}>Rs. {c.schemeType}</td>
+                            <td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: '800', color: '#15803d' }}>Rs. {calculateCustomerTotalPaid(c).toLocaleString('en-IN')}</td>
+                            <td style={{ fontWeight: '700', color: '#15803d' }}>
+                              {c.paidMonthsCount} / {c.totalMonths} Paid
+                            </td>
+                            <td style={{ color: '#475569', fontWeight: '800' }}>{c.referral && c.referral !== c.name ? c.referral : (c.referral === c.name ? c.referral : '-')}</td>
+                            <td>
+                              {c.withdrawal && c.withdrawal.isWithdrawn ? (
+                                <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '4px 10px', borderRadius: '12px', fontWeight: '800', fontSize: '12px' }}>
+                                  🎉 Withdrawn ({c.withdrawal.withdrawDate})
+                                </span>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '12px' }}>Active</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
