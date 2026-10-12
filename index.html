@@ -1955,8 +1955,13 @@
     function MasterAccountsBalanceSheetView({ configs, coreReferrals, version }) {
       const [selectedMonthIndex, setSelectedMonthIndex] = useState(0);
       const [selectedVersion, setSelectedVersion] = useState(version || 'Overall');
-      const [summary, setSummary] = useState(null);
-      const [isLoading, setIsLoading] = useState(true);
+      
+      const cacheKey = `${selectedVersion}_${selectedMonthIndex}`;
+      window.jvMasterAccountsCache = window.jvMasterAccountsCache || {};
+      const cached = window.jvMasterAccountsCache[cacheKey];
+
+      const [summary, setSummary] = useState(cached || null);
+      const [isLoading, setIsLoading] = useState(!cached);
       const [isExportingPDF, setIsExportingPDF] = useState(false);
 
       const activeConfig = configs[selectedVersion] || configs['JV_1.0'] || configs['JV_3.0'] || {};
@@ -1966,19 +1971,37 @@
         { name: 'Month 9' }, { name: 'Month 10' }, { name: 'Month 11' }, { name: 'Month 12' }
       ];
 
-      const fetchMasterBalance = () => {
-        setIsLoading(true);
+      const fetchMasterBalance = (force = false) => {
+        const key = `${selectedVersion}_${selectedMonthIndex}`;
+        if (!force && window.jvMasterAccountsCache && window.jvMasterAccountsCache[key]) {
+          setSummary(window.jvMasterAccountsCache[key]);
+          setIsLoading(false);
+          return;
+        }
+        if (!summary && !window.jvMasterAccountsCache[key]) {
+          setIsLoading(true);
+        }
         fetch(`/api/accounts/master-balance-sheet?version=${selectedVersion}&monthIndex=${selectedMonthIndex}`)
           .then(res => res.json())
           .then(data => {
-            if (data.success) setSummary(data.summary);
+            if (data.success) {
+              window.jvMasterAccountsCache = window.jvMasterAccountsCache || {};
+              window.jvMasterAccountsCache[key] = data.summary;
+              setSummary(data.summary);
+            }
           })
           .catch(e => console.error(e))
           .finally(() => setIsLoading(false));
       };
 
       useEffect(() => {
-        fetchMasterBalance();
+        const key = `${selectedVersion}_${selectedMonthIndex}`;
+        if (window.jvMasterAccountsCache && window.jvMasterAccountsCache[key]) {
+          setSummary(window.jvMasterAccountsCache[key]);
+          setIsLoading(false);
+        } else {
+          fetchMasterBalance();
+        }
       }, [selectedVersion, selectedMonthIndex]);
 
       const handleDeleteTransfer = async (id) => {
@@ -1988,7 +2011,10 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transferId: id })
         });
-        fetchMasterBalance();
+        window.jvMasterAccountsCache = {};
+        window.jvAdminCache = {};
+        window.jvPartnerCache = {};
+        fetchMasterBalance(true);
       };
 
       const displayVerName = selectedVersion === 'Overall' ? 'Overall All-JV' : selectedVersion.replace('_', ' ');
@@ -2486,15 +2512,18 @@
       ].filter(r => r.cr > 0 || r.dr > 0);
 
       const pdfContainer = document.createElement('div');
-      pdfContainer.style.padding = '24px';
+      pdfContainer.style.width = '740px';
+      pdfContainer.style.maxWidth = '740px';
+      pdfContainer.style.boxSizing = 'border-box';
+      pdfContainer.style.padding = '18px 20px';
       pdfContainer.style.fontFamily = "'Noto Sans Tamil', 'Inter', sans-serif";
       pdfContainer.style.color = '#0b1f3a';
       pdfContainer.style.background = '#ffffff';
 
       pdfContainer.innerHTML = `
         <!-- HEADER SECTION -->
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #0b1f3a; padding-bottom: 12px;">
-          <div>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #0b1f3a; padding-bottom: 12px; gap: 16px;">
+          <div style="flex: 1;">
             <h2 style="font-size: 22px; margin: 0; color: #0b1f3a; font-weight: 900;">JayanVijayan Chit Fund</h2>
             <div style="font-size: 13px; color: #475569; font-weight: 700; margin-top: 4px;">
               Overall Master Balance Sheet Statement (${displayVerName})
@@ -2506,38 +2535,38 @@
               Scope: <strong>Consolidated Master (All Referral Partners & Customers)</strong>
             </div>
           </div>
-          <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; background: #f8fafc; text-align: right; min-width: 240px;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; background: #f8fafc; min-width: 260px; max-width: 290px;">
+            <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px;">
               <thead>
                 <tr style="border-bottom: 1px solid #cbd5e1;">
-                  <th style="text-align: left; padding-bottom: 4px;">Scope</th>
-                  <th style="text-align: right; padding-bottom: 4px;">Total Cr</th>
-                  <th style="text-align: right; padding-bottom: 4px;">Total Dr</th>
+                  <th style="width: 44%; text-align: left; padding: 3px 4px; font-weight: 800; color: #0b1f3a;">Scope</th>
+                  <th style="width: 28%; text-align: right; padding: 3px 4px; font-weight: 800; color: #15803d;">Total Cr</th>
+                  <th style="width: 28%; text-align: right; padding: 3px 4px; font-weight: 800; color: #b91c1c;">Total Dr</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td style="font-weight: 800; padding-top: 4px;">All Partners</td>
-                  <td style="text-align: right; font-weight: 700; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="text-align: right; font-weight: 700; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="font-weight: 800; padding: 4px 4px; text-align: left;">All Partners</td>
+                  <td style="text-align: right; padding: 4px 4px; font-weight: 700; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="text-align: right; padding: 4px 4px; font-weight: 700; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
                 <tr style="border-top: 1px solid #cbd5e1; font-weight: 900;">
-                  <td style="padding-top: 4px;">Total Turnover</td>
-                  <td style="text-align: right; padding-top: 4px; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="text-align: right; padding-top: 4px; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 4px 4px; text-align: left;">Total Turnover</td>
+                  <td style="text-align: right; padding: 4px 4px; color: #15803d;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="text-align: right; padding: 4px 4px; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
-                <tr style="font-weight: 900;">
-                  <td style="padding-top: 2px;">Net Cash Balance</td>
-                  <td colspan="2" style="text-align: right; padding-top: 2px; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'};">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <tr style="border-top: 1px solid #e2e8f0; font-weight: 900;">
+                  <td style="padding: 4px 4px; text-align: left;">Net Cash Balance</td>
+                  <td colspan="2" style="text-align: right; padding: 4px 4px; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'};">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
                 <tr style="border-top: 1px dashed #cbd5e1; font-weight: 900;">
-                  <td style="padding-top: 4px; color: #b91c1c;">Pending Collection</td>
-                  <td colspan="2" style="text-align: right; padding-top: 4px; color: #b91c1c; font-size: 13px;">
+                  <td style="padding: 4px 4px; text-align: left; color: #b91c1c;">Pending Collection</td>
+                  <td colspan="2" style="text-align: right; padding: 4px 4px; color: #b91c1c; font-size: 12px;">
                     Rs. ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="3" style="text-align: right; padding-top: 4px; font-size: 10px; font-weight: 800; color: ${summary.isMasterTallied ? '#15803d' : '#b91c1c'};">
+                  <td colspan="3" style="text-align: right; padding: 5px 4px 2px 4px; font-size: 10px; font-weight: 800; color: ${summary.isMasterTallied ? '#15803d' : '#b91c1c'};">
                     ${summary.isZeroNet ? '✨ 0 TALLIED (ZERO NET BALANCED)' : (summary.isMasterTallied ? `✨ 0 TALLIED (BALANCED: NET RS. ${summary.masterNetDifference.toLocaleString('en-IN')})` : '⚠️ UNTALLIED')}
                   </td>
                 </tr>
@@ -2551,44 +2580,44 @@
           <div style="font-size: 13px; font-weight: 900; color: #0b1f3a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
             ⚖️ Consolidated Monthly Balance Sheet (Tally Format)
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 12px; border: 1.5px solid #0b1f3a;">
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; border: 1.5px solid #0b1f3a;">
             <thead>
               <tr style="background: #0b1f3a; color: #ffffff;">
-                <th style="padding: 8px 10px; text-align: left; width: 80px; border-right: 1px solid #334155;">Period</th>
-                <th style="padding: 8px 10px; text-align: left; border-right: 1px solid #334155;">Particulars / Details</th>
-                <th style="padding: 8px 10px; text-align: right; width: 120px; border-right: 1px solid #334155;">Cr (Rs.)</th>
-                <th style="padding: 8px 10px; text-align: right; width: 120px;">Dr (Rs.)</th>
+                <th style="padding: 7px 8px; text-align: left; width: 12%; border-right: 1px solid #334155; vertical-align: middle;">Period</th>
+                <th style="padding: 7px 8px; text-align: left; width: 52%; border-right: 1px solid #334155; vertical-align: middle;">Particulars / Details</th>
+                <th style="padding: 7px 8px; text-align: right; width: 18%; border-right: 1px solid #334155; vertical-align: middle;">Cr (Rs.)</th>
+                <th style="padding: 7px 8px; text-align: right; width: 18%; vertical-align: middle;">Dr (Rs.)</th>
               </tr>
             </thead>
             <tbody>
               <tr style="border-top: 1px solid #cbd5e1;">
-                <td style="padding: 8px 10px; font-weight: 800; border-right: 1px solid #cbd5e1; background: #f1f5f9;">${monthLabel.split(' ')[0].slice(0, 3)}</td>
-                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1; font-weight: 800;">Opening Balance (Brought Forward)</td>
-                <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1;">${openingBalance > 0 ? openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : (openingBalance === 0 ? '0.00' : '')}</td>
-                <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #b91c1c;">${openingBalance < 0 ? Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}</td>
+                <td style="padding: 7px 8px; font-weight: 800; border-right: 1px solid #cbd5e1; background: #f1f5f9; text-align: left; vertical-align: middle;">${monthLabel.split(' ')[0].slice(0, 3)}</td>
+                <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; font-weight: 800; text-align: left; vertical-align: middle;">Opening Balance (Brought Forward)</td>
+                <td style="padding: 7px 8px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1; vertical-align: middle;">${openingBalance > 0 ? openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : (openingBalance === 0 ? '0.00' : '')}</td>
+                <td style="padding: 7px 8px; text-align: right; font-weight: 700; color: #b91c1c; vertical-align: middle;">${openingBalance < 0 ? Math.abs(openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}</td>
               </tr>
               ${rows.map(row => `
                 <tr style="border-top: 1px solid #cbd5e1;">
-                  <td style="padding: 8px 10px; font-weight: 800; border-right: 1px solid #cbd5e1; background: #f1f5f9;"></td>
-                  <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">${row.desc}</td>
-                  <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1;">
+                  <td style="padding: 7px 8px; font-weight: 800; border-right: 1px solid #cbd5e1; background: #f1f5f9; text-align: left; vertical-align: middle;"></td>
+                  <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">${row.desc}</td>
+                  <td style="padding: 7px 8px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1; vertical-align: middle;">
                     ${row.cr > 0 ? row.cr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
                   </td>
-                  <td style="padding: 8px 10px; text-align: right; font-weight: 700; color: #b91c1c;">
+                  <td style="padding: 7px 8px; text-align: right; font-weight: 700; color: #b91c1c; vertical-align: middle;">
                     ${row.dr > 0 ? row.dr.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : ''}
                   </td>
                 </tr>
               `).join('')}
               <tr style="border-top: 2px solid #0b1f3a; background: #f8fafc; font-weight: 900;">
-                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Total</td>
-                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Cumulative Monthly Turnover</td>
-                <td style="padding: 8px 10px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 8px 10px; text-align: right; color: #b91c1c;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">Total</td>
+                <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">Cumulative Monthly Turnover</td>
+                <td style="padding: 7px 8px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; vertical-align: middle;">${totalCr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 7px 8px; text-align: right; color: #b91c1c; vertical-align: middle;">${totalDr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
-              <tr style="background: #f1f5f9; font-weight: 900; font-size: 13px;">
-                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Balance</td>
-                <td style="padding: 8px 10px; border-right: 1px solid #cbd5e1;">Net Carry-Forward Closing Balance</td>
-                <td colspan="2" style="padding: 8px 10px; text-align: right; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'};">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              <tr style="background: #f1f5f9; font-weight: 900; font-size: 12px;">
+                <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">Balance</td>
+                <td style="padding: 7px 8px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">Net Carry-Forward Closing Balance</td>
+                <td colspan="2" style="padding: 7px 8px; text-align: right; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'}; vertical-align: middle;">${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
               </tr>
             </tbody>
           </table>
@@ -2599,61 +2628,61 @@
           <div style="font-size: 13px; font-weight: 900; color: #0b1f3a; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
             👥 Partner Financial Standings & Cash Clearings (${monthLabel})
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #0b1f3a;">
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 9.5px; border: 1.5px solid #0b1f3a;">
             <thead>
               <tr style="background: #1e293b; color: #ffffff;">
-                <th style="padding: 6px 8px; text-align: left; border-right: 1px solid #475569;">Referral Partner</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Opening Bal</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Collections (CR)</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569; background: #991b1b;">Pending Collection</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Inward Trf</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Outside CR</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Payouts (DR)</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Outward Trf</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Outside DR</th>
-                <th style="padding: 6px 8px; text-align: right; border-right: 1px solid #475569;">Closing Bal</th>
-                <th style="padding: 6px 8px; text-align: center;">Status</th>
+                <th style="padding: 6px 4px; text-align: left; width: 13%; border-right: 1px solid #475569; vertical-align: middle;">Referral Partner</th>
+                <th style="padding: 6px 4px; text-align: right; width: 8%; border-right: 1px solid #475569; vertical-align: middle;">Opening Bal</th>
+                <th style="padding: 6px 4px; text-align: right; width: 9.5%; border-right: 1px solid #475569; vertical-align: middle;">Collections (CR)</th>
+                <th style="padding: 6px 4px; text-align: right; width: 9.5%; border-right: 1px solid #475569; background: #991b1b; vertical-align: middle;">Pending Coll.</th>
+                <th style="padding: 6px 4px; text-align: right; width: 8%; border-right: 1px solid #475569; vertical-align: middle;">Inward Trf</th>
+                <th style="padding: 6px 4px; text-align: right; width: 8%; border-right: 1px solid #475569; vertical-align: middle;">Outside CR</th>
+                <th style="padding: 6px 4px; text-align: right; width: 9%; border-right: 1px solid #475569; vertical-align: middle;">Payouts (DR)</th>
+                <th style="padding: 6px 4px; text-align: right; width: 8%; border-right: 1px solid #475569; vertical-align: middle;">Outward Trf</th>
+                <th style="padding: 6px 4px; text-align: right; width: 8%; border-right: 1px solid #475569; vertical-align: middle;">Outside DR</th>
+                <th style="padding: 6px 4px; text-align: right; width: 10%; border-right: 1px solid #475569; vertical-align: middle;">Closing Bal</th>
+                <th style="padding: 6px 4px; text-align: center; width: 9%; vertical-align: middle;">Status</th>
               </tr>
             </thead>
             <tbody>
               ${(summary.partnerBalances || []).map(p => `
                 <tr style="border-top: 1px solid #cbd5e1;">
-                  <td style="padding: 6px 8px; font-weight: 800; border-right: 1px solid #cbd5e1;">👤 ${p.referral}</td>
-                  <td style="padding: 6px 8px; text-align: right; color: #64748b; border-right: 1px solid #cbd5e1;">${(p.openingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1;">${(p.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; text-align: right; font-weight: 800; color: ${(partnerPendingMap[p.referral] || 0) > 0 ? '#b91c1c' : '#15803d'}; border-right: 1px solid #cbd5e1;">
+                  <td style="padding: 6px 4px; font-weight: 800; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">👤 ${p.referral}</td>
+                  <td style="padding: 6px 4px; text-align: right; color: #64748b; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.openingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 6px 4px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 6px 4px; text-align: right; font-weight: 800; color: ${(partnerPendingMap[p.referral] || 0) > 0 ? '#b91c1c' : '#15803d'}; border-right: 1px solid #cbd5e1; vertical-align: middle;">
                     ${(partnerPendingMap[p.referral] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td style="padding: 6px 8px; text-align: right; color: #0284c7; border-right: 1px solid #cbd5e1;">${(p.transfersIn || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; text-align: right; color: #7c3aed; border-right: 1px solid #cbd5e1;">${(p.outsideCR || 0) > 0 ? (p.outsideCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
-                  <td style="padding: 6px 8px; text-align: right; font-weight: 700; color: #b91c1c; border-right: 1px solid #cbd5e1;">${(p.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1;">${(p.transfersOut || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 6px 8px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1;">${(p.outsideDR || 0) > 0 ? (p.outsideDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
-                  <td style="padding: 6px 8px; text-align: right; font-weight: 900; color: ${p.closingBalance === 0 ? '#15803d' : (p.closingBalance > 0 ? '#0284c7' : '#b91c1c')}; border-right: 1px solid #cbd5e1;">
+                  <td style="padding: 6px 4px; text-align: right; color: #0284c7; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.transfersIn || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 6px 4px; text-align: right; color: #7c3aed; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.outsideCR || 0) > 0 ? (p.outsideCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
+                  <td style="padding: 6px 4px; text-align: right; font-weight: 700; color: #b91c1c; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 6px 4px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.transfersOut || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td style="padding: 6px 4px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(p.outsideDR || 0) > 0 ? (p.outsideDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
+                  <td style="padding: 6px 4px; text-align: right; font-weight: 900; color: ${p.closingBalance === 0 ? '#15803d' : (p.closingBalance > 0 ? '#0284c7' : '#b91c1c')}; border-right: 1px solid #cbd5e1; vertical-align: middle;">
                     ${(p.closingBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td style="padding: 6px 8px; text-align: center; font-size: 10px; font-weight: 800;">
+                  <td style="padding: 6px 4px; text-align: center; font-size: 9px; font-weight: 800; vertical-align: middle;">
                     ${p.closingBalance === 0 ? '✓ Balanced' : (p.closingBalance > 0 ? '💰 Surplus' : '📉 Deficit')}
                   </td>
                 </tr>
               `).join('')}
               <tr style="border-top: 2px solid #0b1f3a; background: #f8fafc; font-weight: 900;">
-                <td style="padding: 6px 8px; border-right: 1px solid #cbd5e1;">MASTER TOTAL</td>
-                <td style="padding: 6px 8px; text-align: right; border-right: 1px solid #cbd5e1;">${openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1;">${(summary.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; text-align: right; color: ${totalCustomerPending > 0 ? '#b91c1c' : '#15803d'}; border-right: 1px solid #cbd5e1;">
+                <td style="padding: 6px 4px; border-right: 1px solid #cbd5e1; text-align: left; vertical-align: middle;">MASTER TOTAL</td>
+                <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #cbd5e1; vertical-align: middle;">${openingBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 4px; text-align: right; color: #15803d; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(summary.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 4px; text-align: right; color: ${totalCustomerPending > 0 ? '#b91c1c' : '#15803d'}; border-right: 1px solid #cbd5e1; vertical-align: middle;">
                   ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td style="padding: 6px 8px; text-align: right; border-right: 1px solid #cbd5e1;">-</td>
-                <td style="padding: 6px 8px; text-align: right; color: #7c3aed; border-right: 1px solid #cbd5e1;">${(summary.outsideCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; text-align: right; color: #b91c1c; border-right: 1px solid #cbd5e1;">${(summary.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; text-align: right; border-right: 1px solid #cbd5e1;">-</td>
-                <td style="padding: 6px 8px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1;">${(summary.outsideDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                <td style="padding: 6px 8px; text-align: right; font-size: 12px; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'}; border-right: 1px solid #cbd5e1;">
+                <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #cbd5e1; vertical-align: middle;">-</td>
+                <td style="padding: 6px 4px; text-align: right; color: #7c3aed; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(summary.outsideCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 4px; text-align: right; color: #b91c1c; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(summary.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 4px; text-align: right; border-right: 1px solid #cbd5e1; vertical-align: middle;">-</td>
+                <td style="padding: 6px 4px; text-align: right; color: #d97706; border-right: 1px solid #cbd5e1; vertical-align: middle;">${(summary.outsideDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                <td style="padding: 6px 4px; text-align: right; font-size: 10px; color: ${finalBalance >= 0 ? '#15803d' : '#b91c1c'}; border-right: 1px solid #cbd5e1; vertical-align: middle;">
                   ${finalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td style="padding: 6px 8px; text-align: center; font-size: 10px;">
-                  ${summary.isMasterTallied ? '✨ 100% TALLIED' : '⚠️ UNTALLIED'}
+                <td style="padding: 6px 4px; text-align: center; font-size: 9px; vertical-align: middle;">
+                  ${summary.isMasterTallied ? '✨ TALLIED' : '⚠️ UNTALLIED'}
                 </td>
               </tr>
             </tbody>
@@ -2666,31 +2695,31 @@
             <div style="font-size: 13px; font-weight: 900; color: #b91c1c; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
               🔴 Auction Payouts Disbursed to Winners (${monthLabel})
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #b91c1c;">
+            <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; border: 1.5px solid #b91c1c;">
               <thead>
                 <tr style="background: #b91c1c; color: #ffffff;">
-                  <th style="padding: 6px 8px; text-align: left;">Disbursal ID</th>
-                  <th style="padding: 6px 8px; text-align: left;">Customer Name (Winner)</th>
-                  <th style="padding: 6px 8px; text-align: left;">Disbursed By Partner</th>
-                  <th style="padding: 6px 8px; text-align: left;">Date</th>
-                  <th style="padding: 6px 8px; text-align: left;">Notes</th>
-                  <th style="padding: 6px 8px; text-align: right;">Amount (DR Rs.)</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 14%; vertical-align: middle;">Disbursal ID</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 26%; vertical-align: middle;">Customer Name (Winner)</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 18%; vertical-align: middle;">Disbursed By Partner</th>
+                  <th style="padding: 6px 6px; text-align: center; width: 12%; vertical-align: middle;">Date</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 14%; vertical-align: middle;">Notes</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 16%; vertical-align: middle;">Amount (DR Rs.)</th>
                 </tr>
               </thead>
               <tbody>
                 ${summary.disbursals.map(d => `
                   <tr style="border-top: 1px solid #fca5a5;">
-                    <td style="padding: 6px 8px; font-family: monospace; font-weight: 700;">${d.id}</td>
-                    <td style="padding: 6px 8px; font-weight: 800; color: #0b1f3a;">${d.customerName}</td>
-                    <td style="padding: 6px 8px; font-weight: 700;">👤 ${d.disbursedBy}</td>
-                    <td style="padding: 6px 8px;">${d.date}</td>
-                    <td style="padding: 6px 8px; color: #64748b;">${d.notes || '-'}</td>
-                    <td style="padding: 6px 8px; text-align: right; font-weight: 800; color: #b91c1c;">${(d.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style="padding: 6px 6px; font-family: monospace; font-weight: 700; text-align: left; vertical-align: middle;">${d.id}</td>
+                    <td style="padding: 6px 6px; font-weight: 800; color: #0b1f3a; text-align: left; vertical-align: middle;">${d.customerName}</td>
+                    <td style="padding: 6px 6px; font-weight: 700; text-align: left; vertical-align: middle;">👤 ${d.disbursedBy}</td>
+                    <td style="padding: 6px 6px; text-align: center; vertical-align: middle;">${d.date}</td>
+                    <td style="padding: 6px 6px; color: #64748b; text-align: left; vertical-align: middle;">${d.notes || '-'}</td>
+                    <td style="padding: 6px 6px; text-align: right; font-weight: 800; color: #b91c1c; vertical-align: middle;">${(d.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                   </tr>
                 `).join('')}
                 <tr style="border-top: 1.5px solid #b91c1c; background: #fef2f2; font-weight: 900;">
-                  <td colspan="5" style="padding: 6px 8px;">Total Disbursals DR</td>
-                  <td style="padding: 6px 8px; text-align: right; color: #b91c1c;">${(summary.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                  <td colspan="5" style="padding: 6px 6px; text-align: left; vertical-align: middle;">Total Disbursals DR</td>
+                  <td style="padding: 6px 6px; text-align: right; color: #b91c1c; vertical-align: middle;">${(summary.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                 </tr>
               </tbody>
             </table>
@@ -2702,15 +2731,15 @@
             <div style="font-size: 13px; font-weight: 900; color: #7c3aed; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">
               ⚡ Outside Party Transactions Ledger (${monthLabel})
             </div>
-            <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #7c3aed;">
+            <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; border: 1.5px solid #7c3aed;">
               <thead>
                 <tr style="background: #7c3aed; color: #ffffff;">
-                  <th style="padding: 6px 8px; text-align: left;">Date</th>
-                  <th style="padding: 6px 8px; text-align: left;">Partner Involved</th>
-                  <th style="padding: 6px 8px; text-align: left;">Direction</th>
-                  <th style="padding: 6px 8px; text-align: left;">Outside Person / Party</th>
-                  <th style="padding: 6px 8px; text-align: left;">Notes</th>
-                  <th style="padding: 6px 8px; text-align: right;">Amount (Rs.)</th>
+                  <th style="padding: 6px 6px; text-align: center; width: 12%; vertical-align: middle;">Date</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 18%; vertical-align: middle;">Partner Involved</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 20%; vertical-align: middle;">Direction</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 20%; vertical-align: middle;">Outside Person / Party</th>
+                  <th style="padding: 6px 6px; text-align: left; width: 14%; vertical-align: middle;">Notes</th>
+                  <th style="padding: 6px 6px; text-align: right; width: 16%; vertical-align: middle;">Amount (Rs.)</th>
                 </tr>
               </thead>
               <tbody>
@@ -2719,14 +2748,14 @@
                   const partner = isInward ? t.toReferral : t.fromReferral;
                   return `
                     <tr style="border-top: 1px solid #ddd6fe;">
-                      <td style="padding: 6px 8px;">${t.date}</td>
-                      <td style="padding: 6px 8px; font-weight: 700;">👤 ${partner}</td>
-                      <td style="padding: 6px 8px; font-weight: 700; color: ${isInward ? '#15803d' : '#b91c1c'};">
+                      <td style="padding: 6px 6px; text-align: center; vertical-align: middle;">${t.date}</td>
+                      <td style="padding: 6px 6px; font-weight: 700; text-align: left; vertical-align: middle;">👤 ${partner}</td>
+                      <td style="padding: 6px 6px; font-weight: 700; color: ${isInward ? '#15803d' : '#b91c1c'}; text-align: left; vertical-align: middle;">
                         ${isInward ? '📥 Credit (Inward Received)' : '📤 Debit (Outward Sent)'}
                       </td>
-                      <td style="padding: 6px 8px; font-weight: 700;">⚡ ${t.outsidePersonName || 'Outside Party'}</td>
-                      <td style="padding: 6px 8px; color: #64748b;">${t.notes || '-'}</td>
-                      <td style="padding: 6px 8px; text-align: right; font-weight: 800; color: ${isInward ? '#15803d' : '#b91c1c'};">
+                      <td style="padding: 6px 6px; font-weight: 700; text-align: left; vertical-align: middle;">⚡ ${t.outsidePersonName || 'Outside Party'}</td>
+                      <td style="padding: 6px 6px; color: #64748b; text-align: left; vertical-align: middle;">${t.notes || '-'}</td>
+                      <td style="padding: 6px 6px; text-align: right; font-weight: 800; color: ${isInward ? '#15803d' : '#b91c1c'}; vertical-align: middle;">
                         ${isInward ? '+' : '-'} ${(t.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                     </tr>
@@ -2737,70 +2766,56 @@
           </div>
         ` : ''}
 
-        <!-- 4. ALL CUSTOMERS MONTHLY COLLECTIONS & PENDING COLLECTION DUES LEDGER -->
-        <div style="margin-bottom: 20px;">
+        <!-- 4. PARTNER COLLECTIONS & DISBURSEMENTS SUMMARY TABLE -->
+        <div style="margin-bottom: 20px; page-break-inside: avoid;">
           <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; flex-wrap: wrap; gap: 8px;">
             <div style="font-size: 13px; font-weight: 900; color: #059669; text-transform: uppercase; letter-spacing: 0.5px;">
-              🟢 Customer Collections & Outstanding Dues (${customerRows.length} Members • ${monthLabel})
+              🟢 Partner Collections & Disbursements Summary (${monthLabel})
             </div>
             <div style="font-size: 11px; color: #475569; font-weight: 700; display: flex; gap: 14px;">
-              <span>Collected (CR): <strong style="color: #15803d;">Rs. ${(summary.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
-              <span>Pending Collection: <strong style="color: #b91c1c;">Rs. ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+              <span>Total Collections (CR): <strong style="color: #15803d;">Rs. ${(summary.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
+              <span>Pending Collections: <strong style="color: #b91c1c;">Rs. ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></span>
             </div>
           </div>
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #059669;">
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; border: 1.5px solid #059669;">
             <thead>
               <tr style="background: #059669; color: #ffffff;">
-                <th style="padding: 6px 8px; text-align: center; width: 40px; border-right: 1px solid #10b981;">S.No</th>
-                <th style="padding: 6px 8px; text-align: left; border-right: 1px solid #10b981;">Customer / Member Name</th>
-                <th style="padding: 6px 8px; text-align: left; width: 85px; border-right: 1px solid #10b981;">Partner</th>
-                <th style="padding: 6px 8px; text-align: left; width: 90px; border-right: 1px solid #10b981;">Plan Type</th>
-                <th style="padding: 6px 8px; text-align: right; width: 90px; border-right: 1px solid #10b981;">Month Due</th>
-                <th style="padding: 6px 8px; text-align: right; width: 95px; border-right: 1px solid #10b981;">Paid (CR Rs.)</th>
-                <th style="padding: 6px 8px; text-align: right; width: 100px; border-right: 1px solid #10b981; background: #991b1b;">Pending (Rs.)</th>
-                <th style="padding: 6px 8px; text-align: center; width: 85px;">Status</th>
+                <th style="padding: 7px 8px; text-align: left; width: 34%; border-right: 1px solid #10b981; vertical-align: middle;">Partner Name</th>
+                <th style="padding: 7px 8px; text-align: right; width: 22%; border-right: 1px solid #10b981; vertical-align: middle;">Total Collections (CR)</th>
+                <th style="padding: 7px 8px; text-align: right; width: 22%; border-right: 1px solid #10b981; vertical-align: middle;">Total Disbursements (DR)</th>
+                <th style="padding: 7px 8px; text-align: right; width: 22%; vertical-align: middle;">Pending Collection Amount</th>
               </tr>
             </thead>
             <tbody>
-              ${customerRows.length === 0 ? `
-                <tr>
-                  <td colspan="8" style="padding: 14px; text-align: center; color: #64748b; font-style: italic;">
-                    No customer records found for this period.
-                  </td>
-                </tr>
-              ` : customerRows.map((col, cIdx) => `
-                <tr style="border-top: 1px solid #e2e8f0; background: ${cIdx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-                  <td style="padding: 5px 8px; text-align: center; font-weight: 700; color: #64748b; border-right: 1px solid #e2e8f0;">${col.sno}</td>
-                  <td style="padding: 5px 8px; font-weight: 800; color: #0b1f3a; border-right: 1px solid #e2e8f0;">${col.name}</td>
-                  <td style="padding: 5px 8px; font-weight: 700; color: #1e293b; border-right: 1px solid #e2e8f0;">👤 ${col.referral}</td>
-                  <td style="padding: 5px 8px; font-weight: 700; color: #0284c7; border-right: 1px solid #e2e8f0;">Rs. ${col.plan}</td>
-                  <td style="padding: 5px 8px; text-align: right; color: #475569; border-right: 1px solid #e2e8f0;">${col.payable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                  <td style="padding: 5px 8px; text-align: right; font-weight: 800; color: #15803d; border-right: 1px solid #e2e8f0;">${col.paidAmount > 0 ? col.paidAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}</td>
-                  <td style="padding: 5px 8px; text-align: right; font-weight: 800; color: ${col.pendingAmount > 0 ? '#b91c1c' : '#15803d'}; border-right: 1px solid #e2e8f0;">
-                    ${col.pendingAmount > 0 ? col.pendingAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '-'}
-                  </td>
-                  <td style="padding: 5px 8px; text-align: center; font-size: 10px; font-weight: 800;">
-                    <span style="color: ${col.status === 'PAID' ? '#15803d' : (col.status === 'PARTIAL' ? '#d97706' : '#b91c1c')};">
-                      ${col.status === 'PAID' ? '✓ Paid' : (col.status === 'PARTIAL' ? '⚡ Partial' : '⚠️ Pending')}
-                    </span>
-                  </td>
-                </tr>
-              `).join('')}
+              ${(summary.partnerBalances || []).map((p, idx) => {
+                const pPending = partnerPendingMap[p.referral] || 0;
+                return `
+                  <tr style="border-top: 1px solid #e2e8f0; background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+                    <td style="padding: 6px 8px; font-weight: 800; color: #0b1f3a; border-right: 1px solid #e2e8f0; text-align: left; vertical-align: middle;">👤 ${p.referral}</td>
+                    <td style="padding: 6px 8px; text-align: right; font-weight: 700; color: #15803d; border-right: 1px solid #e2e8f0; vertical-align: middle;">
+                      ${(p.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style="padding: 6px 8px; text-align: right; font-weight: 700; color: #b91c1c; border-right: 1px solid #e2e8f0; vertical-align: middle;">
+                      ${(p.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style="padding: 6px 8px; text-align: right; font-weight: 800; color: ${pPending > 0 ? '#b91c1c' : '#15803d'}; vertical-align: middle;">
+                      ${pPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
               <tr style="border-top: 2px solid #059669; background: #ecfdf5; font-weight: 900;">
-                <td colspan="4" style="padding: 6px 8px; border-right: 1px solid #a7f3d0;">
-                  Total Dues & Collections (${customerRows.length} Members)
+                <td style="padding: 7px 8px; border-right: 1px solid #a7f3d0; text-align: left; vertical-align: middle;">
+                  MASTER TOTAL
                 </td>
-                <td style="padding: 6px 8px; text-align: right; color: #0f172a; border-right: 1px solid #a7f3d0;">
-                  ${totalCustomerPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </td>
-                <td style="padding: 6px 8px; text-align: right; color: #15803d; font-size: 12px; border-right: 1px solid #a7f3d0;">
+                <td style="padding: 7px 8px; text-align: right; color: #15803d; font-size: 11px; border-right: 1px solid #a7f3d0; vertical-align: middle;">
                   ${(summary.collectionsCR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td style="padding: 6px 8px; text-align: right; color: #b91c1c; font-size: 12px; border-right: 1px solid #a7f3d0;">
-                  ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                <td style="padding: 7px 8px; text-align: right; color: #b91c1c; font-size: 11px; border-right: 1px solid #a7f3d0; vertical-align: middle;">
+                  ${(summary.disbursalsDR || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
-                <td style="padding: 6px 8px; text-align: center; font-size: 10px; color: ${totalCustomerPending === 0 ? '#15803d' : '#b91c1c'};">
-                  ${totalCustomerPending === 0 ? '✓ 100% Cleared' : `${customerRows.filter(x => x.pendingAmount > 0).length} Due`}
+                <td style="padding: 7px 8px; text-align: right; color: ${totalCustomerPending > 0 ? '#b91c1c' : '#15803d'}; font-size: 11px; vertical-align: middle;">
+                  ${totalCustomerPending.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </td>
               </tr>
             </tbody>
@@ -2816,7 +2831,7 @@
       document.body.appendChild(pdfContainer);
 
       const opt = {
-        margin: [8, 8, 8, 8],
+        margin: [6, 6, 6, 6],
         filename: `JV_Master_Balance_Sheet_${version}_${monthLabel.replace(/ /g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true, logging: false },
@@ -3183,6 +3198,9 @@
             setTransferAmount('');
             setTransferNotes('');
             setOutsidePersonName('');
+            window.jvMasterAccountsCache = {};
+            window.jvAdminCache = {};
+            window.jvPartnerCache = {};
             fetchSummary();
             setTimeout(() => setTransferMsg(''), 3500);
           }
@@ -3198,6 +3216,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transferId: id })
         });
+        window.jvMasterAccountsCache = {};
+        window.jvAdminCache = {};
+        window.jvPartnerCache = {};
         fetchSummary();
       };
 
@@ -4303,6 +4324,9 @@
 
           setMsg('Record updated successfully!');
           setIsEditingPayment(false);
+          window.jvMasterAccountsCache = {};
+          window.jvAdminCache = {};
+          window.jvPartnerCache = {};
           refreshData();
           setTimeout(() => setMsg(''), 3000);
         } catch (e) {
@@ -4321,8 +4345,12 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ version, customerId: selectedCustId })
           });
+          window.jvMasterAccountsCache = {};
+          window.jvAdminCache = {};
+          window.jvPartnerCache = {};
           setMsg('Customer removed');
           refreshData();
+          setSelectedCustId('');
         } catch (e) {
           alert("Error deleting customer");
         }
